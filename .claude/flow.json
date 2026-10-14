@@ -11,11 +11,11 @@
   "environments": {
     "staging": {
       "workflow": "deploy-staging.yml",
-      "url": "https://siga-staging.vercel.app"
+      "url": "https://siga-orcin-staging.vercel.app"
     },
     "production": {
       "workflow": "deploy-production.yml",
-      "url": "https://siga.vercel.app"
+      "url": "https://siga-orcin.vercel.app"
     }
   },
   "smokePaths": [
