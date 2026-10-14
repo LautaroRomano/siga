@@ -56,7 +56,6 @@ fastlane/test_output
 # Neon CLI
 .neon
 .vercel
-.env*
 
 # Claude Code
 .claude/settings.local.json

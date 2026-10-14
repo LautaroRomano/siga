@@ -1,8 +1,8 @@
 {
-  "repo": "<owner>/<repo>",
+  "repo": "estebansanc/siga",
   "project": {
-    "owner": "<owner>",
-    "number": 1
+    "owner": "estebansanc",
+    "number": 2
   },
   "branches": {
     "develop": "develop",
@@ -11,18 +11,21 @@
   "environments": {
     "staging": {
       "workflow": "deploy-staging.yml",
-      "url": "https://staging.<dominio>"
+      "url": "https://siga-staging.vercel.app"
     },
     "production": {
       "workflow": "deploy-production.yml",
-      "url": "https://app.<dominio>"
+      "url": "https://siga.vercel.app"
     }
   },
-  "smokePaths": ["/", "/api/v1/openapi.json"],
+  "smokePaths": [
+    "/",
+    "/api/v1/openapi.json"
+  ],
   "worktrees": {
-    "dir": "../<repo>-worktrees",
-    "pgAdminUrl": "postgresql://<usuario>:<clave>@localhost:5432/postgres",
-    "dbPrefix": "<prefijo>",
+    "dir": "../siga-worktrees",
+    "pgAdminUrl": "postgresql://crazyfarway@localhost:5432/postgres",
+    "dbPrefix": "siga",
     "ports": {
       "E2E_PORT": 3200
     },
@@ -41,22 +44,27 @@
     "firstNumber": "0.0"
   },
   "product": {
-    "name": "<Producto>",
+    "name": "SiGA",
     "locale": "es-AR",
     "audience": "el usuario",
     "qaUser": "demo@example.com",
     "qaPassword": "demo1234",
-    "routes": ["/"],
+    "routes": [
+      "/"
+    ],
     "releaseNotesPlace": "Configuración → \"?\""
   },
   "services": {
     "neon": {
-      "project": "<id del proyecto de Neon>",
-      "branches": ["main", "staging"]
+      "project": "raspy-bird-78934396",
+      "branches": [
+        "main",
+        "staging"
+      ]
     },
     "vercel": {
-      "team": "<slug del equipo>",
-      "project": "<nombre del proyecto>"
+      "team": "esteban-sanchez",
+      "project": "siga"
     }
   }
 }

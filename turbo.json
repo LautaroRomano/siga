@@ -1,38 +1,73 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
-  "globalEnv": ["NODE_ENV"],
+  "globalEnv": [
+    "NODE_ENV"
+  ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build", "generate"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+      "dependsOn": [
+        "^build",
+        "generate"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**"
+      ]
     },
     "generate": {
       "cache": false
     },
     "dev": {
-      "dependsOn": ["generate"],
+      "dependsOn": [
+        "generate"
+      ],
       "cache": false,
       "persistent": true
     },
     "lint": {
-      "dependsOn": ["^build", "generate"]
+      "dependsOn": [
+        "^build",
+        "generate"
+      ]
     },
     "typecheck": {
-      "dependsOn": ["^build", "generate"]
+      "dependsOn": [
+        "^build",
+        "generate"
+      ]
     },
     "test": {
-      "dependsOn": ["generate"],
-      "passThroughEnv": ["TEST_DATABASE_URL"]
+      "dependsOn": [
+        "generate"
+      ],
+      "passThroughEnv": [
+        "TEST_DATABASE_URL"
+      ]
     },
     "openapi": {
-      "dependsOn": ["generate"],
-      "outputs": ["openapi.json"]
+      "dependsOn": [
+        "generate"
+      ],
+      "outputs": [
+        "openapi.json"
+      ]
     },
     "test:e2e": {
-      "dependsOn": ["generate"],
+      "dependsOn": [
+        "generate"
+      ],
       "cache": false,
-      "env": ["E2E_DATABASE_URL", "E2E_PORT", "RATE_LIMIT", "CI"]
+      "env": [
+        "E2E_DATABASE_URL",
+        "E2E_PORT",
+        "RATE_LIMIT",
+        "CI"
+      ]
     }
+  },
+  "remoteCache": {
+    "teamSlug": "esteban-sanchez"
   }
 }

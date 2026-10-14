@@ -1,6 +1,6 @@
 # product-template
 
-<Producto>: <una línea que describa el producto>. Detalle en `README.md` y `docs/`.
+SiGA: <una línea que describa el producto>. Detalle en `README.md` y `docs/`.
 
 ## Reglas críticas
 

@@ -49,6 +49,9 @@
       }
     ]
   },
+  "enabledPlugins": {
+    "ticket-flow@estebansanc": true
+  },
   "extraKnownMarketplaces": {
     "estebansanc": {
       "source": {
@@ -58,8 +61,5 @@
       "autoUpdate": true
     }
   },
-  "subagentPromptCacheTtl": "1h",
-  "enabledPlugins": {
-    "ticket-flow@estebansanc": true
-  }
+  "subagentPromptCacheTtl": "1h"
 }
