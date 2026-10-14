@@ -1,0 +1,62 @@
+{
+  "repo": "<owner>/<repo>",
+  "project": {
+    "owner": "<owner>",
+    "number": 1
+  },
+  "branches": {
+    "develop": "develop",
+    "main": "main"
+  },
+  "environments": {
+    "staging": {
+      "workflow": "deploy-staging.yml",
+      "url": "https://staging.<dominio>"
+    },
+    "production": {
+      "workflow": "deploy-production.yml",
+      "url": "https://app.<dominio>"
+    }
+  },
+  "smokePaths": ["/", "/api/v1/openapi.json"],
+  "worktrees": {
+    "dir": "../<repo>-worktrees",
+    "pgAdminUrl": "postgresql://<usuario>:<clave>@localhost:5432/postgres",
+    "dbPrefix": "<prefijo>",
+    "ports": {
+      "E2E_PORT": 3200
+    },
+    "commands": {
+      "install": "pnpm install --frozen-lockfile --silent && pnpm --silent db:generate",
+      "check": "pnpm turbo lint typecheck test",
+      "e2e": "pnpm test:e2e",
+      "contracts": "pnpm --filter @repo/api openapi:check",
+      "schema": "pnpm --filter @repo/db migrate:deploy && pnpm --filter @repo/db migrate:check",
+      "migrate": "pnpm db:migrate --name"
+    }
+  },
+  "release": {
+    "file": "apps/web/lib/releases.json",
+    "firstStage": "Alpha",
+    "firstNumber": "0.0"
+  },
+  "product": {
+    "name": "<Producto>",
+    "locale": "es-AR",
+    "audience": "el usuario",
+    "qaUser": "demo@example.com",
+    "qaPassword": "demo1234",
+    "routes": ["/"],
+    "releaseNotesPlace": "Configuración → \"?\""
+  },
+  "services": {
+    "neon": {
+      "project": "<id del proyecto de Neon>",
+      "branches": ["main", "staging"]
+    },
+    "vercel": {
+      "team": "<slug del equipo>",
+      "project": "<nombre del proyecto>"
+    }
+  }
+}

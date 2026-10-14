@@ -1,0 +1,83 @@
+import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { LoginForm } from "@/components/auth/login-form";
+import { renderWithProviders } from "@/test/render";
+
+const { signInEmail, signInWithGoogle, pushMock, state } = vi.hoisted(() => ({
+  signInEmail: vi.fn(),
+  signInWithGoogle: vi.fn(),
+  pushMock: vi.fn(),
+  state: { search: "" },
+}));
+
+vi.mock("@repo/auth/client", () => ({
+  authClient: { signIn: { email: signInEmail } },
+  signInWithGoogle,
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock, refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(state.search),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}));
+
+const fillAndSubmit = async () => {
+  await userEvent.type(screen.getByLabelText("Email"), "demo@example.com");
+  await userEvent.type(screen.getByLabelText("Contraseña"), "secret123");
+  await userEvent.click(screen.getByRole("button", { name: "Ingresar" }));
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  state.search = "";
+  signInWithGoogle.mockResolvedValue(undefined);
+});
+
+describe("LoginForm", () => {
+  it("tras ingresar bien va al inicio y el botón sigue deshabilitado con spinner mientras navega", async () => {
+    signInEmail.mockResolvedValue({ error: null });
+    renderWithProviders(<LoginForm />);
+    await fillAndSubmit();
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
+    const submit = screen.getByRole("button", { name: /Ingresar/ });
+    expect(submit).toBeDisabled();
+    expect(within(submit).getByRole("status")).toBeInTheDocument();
+  });
+
+  it("respeta next al ingresar y en el link a Registrate", async () => {
+    signInEmail.mockResolvedValue({ error: null });
+    state.search = "next=%2Finvitacion%2Finv-1";
+    renderWithProviders(<LoginForm />);
+    expect(screen.getByRole("link", { name: "Registrate" })).toHaveAttribute(
+      "href",
+      "/registro?next=%2Finvitacion%2Finv-1",
+    );
+    await fillAndSubmit();
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/invitacion/inv-1"));
+  });
+
+  it("si las credenciales fallan, vuelve a habilitar el formulario y avisa", async () => {
+    signInEmail.mockResolvedValue({ error: { message: "invalid" } });
+    renderWithProviders(<LoginForm />);
+    await fillAndSubmit();
+    const { toast } = await import("sonner");
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Email o contraseña incorrectos"));
+    expect(screen.getByRole("button", { name: "Ingresar" })).toBeEnabled();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("Continuar con Google deshabilita ambos botones con spinner mientras redirige", async () => {
+    renderWithProviders(<LoginForm />);
+    const google = screen.getByRole("button", { name: "Continuar con Google" });
+    await userEvent.click(google);
+    expect(signInWithGoogle).toHaveBeenCalledWith("/");
+    expect(google).toBeDisabled();
+    expect(within(google).getByRole("status")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ingresar/ })).toBeDisabled();
+  });
+});

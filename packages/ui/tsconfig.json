@@ -1,0 +1,14 @@
+{
+  "extends": "@repo/config/tsconfig/library.json",
+  "compilerOptions": {
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@repo/ui/*": ["./src/*"]
+    },
+    "noUncheckedIndexedAccess": false,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

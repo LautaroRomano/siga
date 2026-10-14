@@ -1,0 +1,5 @@
+{
+  "extends": "@repo/config/tsconfig/library.json",
+  "include": ["src", "prisma", "prisma.config.ts"],
+  "exclude": ["src/generated"]
+}

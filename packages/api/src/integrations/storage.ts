@@ -1,0 +1,84 @@
+import {
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+import { apiEnv, isStorageConfigured } from "../env";
+import { unavailable } from "../errors";
+
+export const uploadUrlTtlSeconds = 300;
+export const readUrlTtlSeconds = 3600;
+
+let client: S3Client | undefined;
+
+const getClient = () => {
+  if (!isStorageConfigured())
+    throw unavailable("El almacenamiento de archivos no está configurado");
+  client ??= new S3Client({
+    region: "auto",
+    endpoint: apiEnv.storage.endpoint,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: apiEnv.storage.accessKeyId,
+      secretAccessKey: apiEnv.storage.secretAccessKey,
+    },
+  });
+  return client;
+};
+
+export const createUploadUrl = async (key: string, contentType: string, contentLength: number) =>
+  getSignedUrl(
+    getClient(),
+    new PutObjectCommand({
+      Bucket: apiEnv.storage.bucket,
+      Key: key,
+      ContentType: contentType,
+      ContentLength: contentLength,
+    }),
+    { expiresIn: uploadUrlTtlSeconds },
+  );
+
+export const createReadUrl = async (key: string) =>
+  getSignedUrl(getClient(), new GetObjectCommand({ Bucket: apiEnv.storage.bucket, Key: key }), {
+    expiresIn: readUrlTtlSeconds,
+  });
+
+export const getObjectSize = async (key: string) => {
+  try {
+    const head = await getClient().send(
+      new HeadObjectCommand({ Bucket: apiEnv.storage.bucket, Key: key }),
+    );
+    return head.ContentLength ?? null;
+  } catch {
+    return null;
+  }
+};
+
+export const getObject = async (key: string) => {
+  try {
+    const object = await getClient().send(
+      new GetObjectCommand({ Bucket: apiEnv.storage.bucket, Key: key }),
+    );
+    if (!object.Body) return null;
+    return {
+      body: await object.Body.transformToByteArray(),
+      contentType: object.ContentType ?? "application/octet-stream",
+    };
+  } catch {
+    return null;
+  }
+};
+
+export const deleteObjects = async (keys: string[]) => {
+  if (keys.length === 0) return;
+  await getClient().send(
+    new DeleteObjectsCommand({
+      Bucket: apiEnv.storage.bucket,
+      Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+    }),
+  );
+};

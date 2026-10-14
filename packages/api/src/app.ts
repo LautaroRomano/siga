@@ -1,0 +1,97 @@
+import { swaggerUI } from "@hono/swagger-ui";
+import { OpenAPIHono } from "@hono/zod-openapi";
+import { UnauthorizedError } from "@repo/auth";
+import { Prisma } from "@repo/db";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
+
+import type { ApiEnv } from "./context";
+import { runWithDefer, type DeferAdapter } from "./deferred";
+import { ApiError } from "./errors";
+import { requireSession } from "./middleware";
+import { cronRoutes } from "./routes/cron";
+import { invitationRoutes } from "./routes/invitations";
+import { meRoutes } from "./routes/me";
+import { memberRoutes } from "./routes/members";
+import { settingsRoutes } from "./routes/settings";
+import { measureRequest } from "./timing";
+
+export const apiBasePath = "/api/v1";
+
+const errorBody = (
+  code: string,
+  message: string,
+  issues?: { path: string; message: string }[],
+) => ({
+  error: { code, message, ...(issues ? { issues } : {}) },
+});
+
+const toErrorResponse = (
+  error: unknown,
+): { status: ContentfulStatusCode; body: ReturnType<typeof errorBody> } => {
+  if (error instanceof ApiError)
+    return { status: error.status, body: errorBody(error.code, error.message) };
+  if (error instanceof UnauthorizedError) {
+    return { status: 401, body: errorBody("UNAUTHORIZED", error.message) };
+  }
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    return { status: 409, body: errorBody("CONFLICT", "Ya existe un registro con esos datos") };
+  }
+  console.error(error);
+  return { status: 500, body: errorBody("INTERNAL", "Ocurrió un error inesperado") };
+};
+
+export type CreateApiOptions = { defer?: DeferAdapter };
+
+export const createApi = ({ defer }: CreateApiOptions = {}) => {
+  const app = new OpenAPIHono<ApiEnv>({
+    defaultHook: (result, c) => {
+      if (result.success) return;
+      const issues = result.error.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+      }));
+      return c.json(errorBody("VALIDATION", "Revisá los datos ingresados", issues), 422);
+    },
+  }).basePath(apiBasePath);
+
+  app.onError((error, c) => {
+    const { status, body } = toErrorResponse(error);
+    return c.json(body, status);
+  });
+
+  app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
+    type: "http",
+    scheme: "bearer",
+  });
+  app.openAPIRegistry.registerComponent("securitySchemes", "cookieAuth", {
+    type: "apiKey",
+    in: "cookie",
+    name: "better-auth.session_token",
+  });
+
+  app.doc31("/openapi.json", {
+    openapi: "3.1.0",
+    info: {
+      title: "API",
+      version: "1.0.0",
+      description:
+        "Sesión, organizaciones, miembros e invitaciones. Autenticación por cookie (web) o bearer token (móvil).",
+    },
+    security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+  });
+  app.get("/docs", swaggerUI({ url: `${apiBasePath}/openapi.json` }));
+
+  app.use("*", measureRequest);
+  app.use("*", (_, next) => runWithDefer(defer, next));
+  app.use("*", requireSession);
+
+  return app
+    .route("/me", meRoutes)
+    .route("/settings", settingsRoutes)
+    .route("/members", memberRoutes)
+    .route("/invitations", invitationRoutes)
+    .route("/cron", cronRoutes);
+};
+
+export type ApiType = ReturnType<typeof createApi>;

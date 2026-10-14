@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+  BETTER_AUTH_SECRET: ci-secret-not-used-for-real-sessions
+  BETTER_AUTH_URL: http://localhost:3000
+  # Remote cache de Turbo (Vercel): comparte resultados con los worktrees locales, que ya corrieron
+  # lint, typecheck y test sobre la misma revisión. Sin estas variables corre igual, sin caché compartida.
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+
+jobs:
+  checks:
+    name: Lint, typecheck, tests y contratos
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://app:app@localhost:5432/app_test
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo lint typecheck --concurrency=2
+      - name: Unit tests e integración (Postgres de servicio)
+        run: pnpm turbo test
+      - name: Verificar que openapi.json está actualizado
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+        run: pnpm --filter @repo/api openapi:check
+      - name: Verificar que el schema de Prisma tiene su migración
+        env:
+          DIRECT_URL: ${{ env.TEST_DATABASE_URL }}
+        run: |
+          pnpm --filter @repo/db migrate:deploy
+          pnpm --filter @repo/db migrate:check
+
+  # Solo antes de producción: en los PRs a develop la suite e2e ya corrió en el worktree
+  # (`worktree.sh e2e`, build de producción) y acá costaba más de 10 minutos por PR.
+  e2e:
+    name: E2E con Playwright
+    if: github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_DATABASE_URL: postgresql://app:app@localhost:5432/app_e2e
+      # `next build` dentro del webServer de Playwright supera el heap por defecto de Node.
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @repo/db generate
+      - name: Caché de navegadores de Playwright
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @repo/web exec playwright install --with-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @repo/web exec playwright install-deps chromium
+      - name: Caché de compilación de Next
+        uses: actions/cache@v4
+        with:
+          path: apps/web/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx,css}') }}
+          restore-keys: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+      - name: E2E contra un build de producción
+        run: pnpm --filter @repo/web test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

@@ -1,0 +1,76 @@
+name: Preview
+
+# Manual: una preview por PR cuesta ~3 minutos de Actions y QA se hace en staging.
+# Etiqueta el PR con `preview` para que `preview-cleanup.yml` borre el branch de Neon al cerrarlo.
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Número del PR a desplegar
+        required: true
+        type: number
+
+concurrency:
+  group: preview-${{ inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: Preview con branch de Neon
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ inputs.pr }}/head
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Crear branch de Neon para el PR
+        id: neon
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          parent_branch: staging
+          branch_name: preview/pr-${{ inputs.pr }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      - name: Aplicar migraciones en el branch
+        env:
+          DIRECT_URL: ${{ steps.neon.outputs.db_url }}
+        run: pnpm --filter @repo/db migrate:deploy
+
+      - name: Deploy preview en Vercel
+        id: vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          DATABASE_URL: ${{ steps.neon.outputs.db_url_pooled }}
+          DIRECT_URL: ${{ steps.neon.outputs.db_url }}
+        run: |
+          url=$(pnpm dlx vercel@59 deploy --yes --token="$VERCEL_TOKEN" \
+            --env DATABASE_URL="$DATABASE_URL" --env DIRECT_URL="$DIRECT_URL" \
+            --build-env DATABASE_URL="$DATABASE_URL" --build-env DIRECT_URL="$DIRECT_URL")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Etiquetar el PR con preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit ${{ inputs.pr }} -R ${{ github.repository }} --add-label preview
+
+      - name: Comentar URL de preview en el PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: preview
+          number: ${{ inputs.pr }}
+          message: |
+            🚀 Preview desplegada: ${{ steps.vercel.outputs.url }}
+            🗄️ Base de datos: branch de Neon `preview/pr-${{ inputs.pr }}`

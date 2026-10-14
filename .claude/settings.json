@@ -1,0 +1,65 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "Bash(board.sh:*)",
+      "Bash(pr.sh:*)",
+      "Bash(worktree.sh:*)",
+      "Bash(release.sh:*)",
+      "Bash(flow.sh:*)",
+      "Bash(doctor.sh:*)",
+      "Bash(gh:*)",
+      "Bash(git:*)",
+      "Bash(pnpm:*)",
+      "Bash(psql:*)",
+      "Bash(curl:*)",
+      "Bash(cd:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(sed:*)",
+      "Bash(grep:*)",
+      "Bash(jq:*)",
+      "Bash(mkdir:*)",
+      "Bash(file:*)",
+      "Bash(sleep:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(rm -rf:*)",
+      "Bash(neon:*)",
+      "Bash(vercel:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command' | { read -r cmd; if [[ \"$cmd\" =~ (^|[[:space:]])--admin([[:space:]]|$) ]]; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"gh pr merge --admin bloqueado: bypassea branch protection. Mergear via review normal o desde la UI si es imprescindible.\"}}'; fi; }",
+            "if": "Bash(gh pr merge:*)"
+          }
+        ]
+      }
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "estebansanc": {
+      "source": {
+        "source": "github",
+        "repo": "estebansanc/ticket-flow"
+      },
+      "autoUpdate": true
+    }
+  },
+  "subagentPromptCacheTtl": "1h",
+  "enabledPlugins": {
+    "ticket-flow@estebansanc": true
+  }
+}

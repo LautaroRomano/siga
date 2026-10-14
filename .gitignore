@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build
+.next/
+out/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# Prisma generated client
+packages/db/src/generated/
+
+# Serwist
+apps/web/public/sw.js
+apps/web/public/sw.js.map
+apps/web/public/swe-worker-*.js
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel/
+
+# Tests
+coverage/
+apps/web/test-results/
+apps/web/playwright-report/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Future iOS client
+xcuserdata/
+*.ipa
+*.dSYM
+*.dSYM.zip
+.build/
+Carthage/Build/
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Neon CLI
+.neon
+.vercel
+.env*
+
+# Claude Code
+.claude/settings.local.json
+
+# Turborepo
+.turbo

@@ -1,0 +1,83 @@
+# Testing
+
+Tres capas, todas ejecutables en local. En CI, los PRs a `develop` corren unit e integración; el e2e corre en CI solo en los PRs a `main` (ver "CI").
+
+| Capa                     | Herramienta                      | Dónde                                                     | Comando                           |
+| ------------------------ | -------------------------------- | --------------------------------------------------------- | --------------------------------- |
+| Unit (dominio)           | Vitest                           | `packages/domain/src/**/*.test.ts`                        | `pnpm --filter @repo/domain test` |
+| Unit + componentes (web) | Vitest + Testing Library + jsdom | `apps/web/lib/__tests__`, `apps/web/components/__tests__` | `pnpm --filter @repo/web test`    |
+| Integración (API)        | Vitest + Postgres real           | `packages/api/src/**/*.test.ts`                           | `pnpm --filter @repo/api test`    |
+| E2E                      | Playwright                       | `apps/web/e2e/*.spec.ts`                                  | `pnpm test:e2e`                   |
+
+`pnpm test` corre las tres primeras en todos los paquetes.
+
+## Unit tests de dominio
+
+Validan los schemas zod: invitación por email (normalizado a minúsculas), perfil (nombre recortado, 1-120), ajustes (nombre opcional, 1-100), slug y helpers comunes. Sin dependencias externas.
+
+## Unit tests de la web
+
+- `lib/__tests__`: `unwrap` del cliente HTTP, fechas en es-AR, helpers de formularios, manifest de la PWA, orden de las organizaciones del selector, reinicio al cambiar de organización, aviso de organización perdida (lectura y escritura tolerantes a errores), versiones (`releases.json` con `changes` posiblemente vacío), tipografía, viewport, nombre del producto.
+- `components/__tests__`: login y registro (navegación a `/` o a `next`, Google, errores), barra lateral (`app-sidebar`: Inicio, Configuración solo para el Administrador, Mi perfil, marca del producto con una organización y selector con varias; carga al cambiar de organización y toast si falla), menú de usuario (`nav-user`: Mi perfil y cerrar sesión que vacía la caché), selector en carga (`organization-switch-content`), aviso de organización perdida, invitación (`invitation-card`: aceptar, rechazar, otro email, estados resueltos, link desconocido), Organización (`organization-section`: validación y guardado del nombre), Miembros (`members-section`: esqueletos, listado con roles e invitaciones, invitar con validación y 409, reenviar, cancelar y quitar con confirmación), Mi perfil (`profile-section`), versión y Novedades (`app-version`, incluida una versión sin cambios), 404 neutro. Renderizan con `test/render.tsx` (React Query provider) y `test/setup.ts` (jest-dom, `matchMedia`).
+
+Los hooks que pegan a la API se mockean con `vi.mock("@/hooks/...")`; para variar `isPending` por test, el estado del mock se declara con `vi.hoisted`. El `Spinner` se localiza por `role="status"` y suma "Loading" al nombre accesible del botón, así que las aserciones sobre botones en carga usan una regex (`{ name: /Guardar/ }`).
+
+## Tests de integración de la API
+
+Corren contra una base Postgres real (`app_test`), aplican las migraciones en `globalSetup` y truncan las tablas antes de cada test (`src/test/db.ts`, con `createOrganization`, `createMember` y `signInAs`, que crea una sesión real de Better Auth por bearer para `auth.api.*`). Cubren:
+
+- Invitaciones (`services/invitations.test.ts`): crear (7 días, email encolado, auditoría), 409 por repetida o por miembro, reenviar sin duplicar, cancelar (404 desde otra organización), leer con estado y `forCurrentUser`, vencida como `EXPIRED`, aceptar (membresía, vuelta a la organización propia, 403 con otro email), rechazar.
+- Membresías (`services/memberships.test.ts`): listado con el Administrador primero, organización propia, quitar un miembro con la ajena activa (la sesión vuelve a la propia con `lostOrganization`), 400 al Administrador y 404 a un no miembro.
+- Quién soy (`services/me.test.ts`): nombre y email desde la base, organizaciones, actualización del perfil.
+- Ajustes (`services/settings.test.ts`): nombre y creación perezosa de la fila.
+- Emails (`services/emails/*.test.ts`): cola con el proveedor mockeado (envío inmediato, sin API key queda pendiente y el cron lo manda después, falla con reintentos de espera creciente hasta `FAILED`) y plantilla de invitación (escape, link, vencimiento).
+- Rate limit (`services/rate-limit.test.ts`): límite por ventana, ventana nueva, concurrencia y purga.
+- Storage (`integrations/storage.test.ts`): 503 sin configurar y firma de URLs sin red.
+- Contrato HTTP (`routes/routes.test.ts`, con `readAuthContext` mockeado): 401/200, 422 con detalle por campo, 404 con formato, cron con secreto, ajustes, perfil, invitaciones y miembros de punta a punta, spec OpenAPI, rol de miembro (`GET /me`, `lostOrganization`, 403 en escrituras y 200 en lecturas).
+- Medición y diferido: `timing.test.ts`, `deferred.test.ts` y `routes/deferred.test.ts` con `createApi({ defer })` y el colector `collectDeferred` (`Server-Timing` en toda respuesta; invitar responde al instante y el email se encola al vaciar la cola, con el actor de auditoría).
+
+Variables: `TEST_DATABASE_URL` (default `postgresql://app:app@localhost:5432/app_test`). Crear la base una vez:
+
+```bash
+psql -d postgres -c "CREATE DATABASE app_test OWNER app;"
+```
+
+## E2E con Playwright
+
+`apps/web/playwright.config.ts` levanta Next en el puerto 3100 contra la base `app_e2e`: `next dev` en local y, cuando `CI` está definido, `next build` + `next start` (el runner de GitHub tiene 2 cores y compilar cada ruta en el primer request hacía la suite varias veces más lenta; con el build de producción baja a unos pocos minutos). Para reproducir el comportamiento de CI en local: `CI=1 pnpm test:e2e`; dentro de un worktree, `worktree.sh e2e` (script del plugin `ticket-flow`) hace eso y además mata servidores huérfanos de una corrida cortada y recrea la base e2e (el global setup solo migra, no limpia, y los datos de corridas anteriores hacen fallar selectores que esperan un único resultado). Cada test registra un usuario nuevo vía API (`e2e/support/fixtures.ts`), así los tests son independientes.
+
+Flujos cubiertos:
+
+| Spec                            | Flujo                                                                                                                                                                                                 |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth.spec.ts`                  | Registro, login con error, redirección de rutas protegidas con `next`, cierre de sesión                                                                                                               |
+| `invitations.spec.ts`           | Invitar desde Configuración con validación, reenviar, registrarse desde el link, aceptar, quitar al miembro, invitar de nuevo y cancelar; otro email ofrece cerrar sesión; link desconocido; rechazar |
+| `organization-switcher.spec.ts` | Solo con más de una organización; cambiar a la ajena y volver a la propia al reingresar; renombrar la organización; carga visible y fallo sin trabarse                                                |
+| `lost-organization.spec.ts`     | Quitar al miembro con la ajena activa: aviso, vuelta al inicio una sola vez, cierre que persiste                                                                                                      |
+| `member-role.spec.ts`           | El miembro no ve Configuración de la ajena ni por URL (403 en la API), el Administrador lo ve listado, y vuelve a ver Configuración en la propia                                                      |
+| `settings.spec.ts`              | Versión y Novedades (también sin cambios); miembros con el Administrador solo y botón Invitar                                                                                                         |
+| `my-profile.spec.ts`            | Cambiar el nombre con validación, persistencia y reflejo en la barra lateral                                                                                                                          |
+| `api.spec.ts`                   | Flujo completo con bearer token, sin cookies (simula iOS)                                                                                                                                             |
+| `not-found.spec.ts`             | URL inexistente con y sin sesión muestra la pantalla neutra                                                                                                                                           |
+| `pwa.spec.ts`                   | Manifest con el nombre del producto, service worker registrado, página offline, íconos sin sesión, zoom bloqueado                                                                                     |
+| `fonts.spec.ts`                 | Google Sans en acceso, inicio, configuración y perfil; tema oscuro; sin pedidos a Google Fonts; offline                                                                                               |
+| `overlay.spec.ts`               | Todo pop-up desenfoca el fondo                                                                                                                                                                        |
+| `mobile.spec.ts`                | Menú hamburguesa, tipografía, ninguna pantalla scrollea a lo ancho, elegir una organización cierra el menú lateral (proyecto `mobile`)                                                                |
+
+```bash
+psql -d postgres -c "CREATE DATABASE app_e2e OWNER app;"           # una vez
+pnpm --filter @repo/web exec playwright install chromium          # una vez
+pnpm test:e2e                                                     # headless
+pnpm --filter @repo/web test:e2e:ui                               # modo UI
+```
+
+Ante un fallo, Playwright deja screenshot, trace y `error-context.md` en `apps/web/test-results/`.
+
+## Qué no se prueba automáticamente
+
+- El envío real con Resend: está cubierto con el proveedor mockeado a nivel de servicio.
+- La subida real a Cloudflare R2: la firma de URLs se prueba en la API sin red.
+
+## CI
+
+`ci.yml` levanta Postgres como servicio en los jobs `checks` (lint, typecheck, unit + integración, `openapi:check`, `migrate:check`) y `e2e` (Playwright). `checks` corre en todo PR; `e2e` solo en los PRs a `main`, porque en los PRs a `develop` la suite ya corrió en el worktree con `worktree.sh e2e` (mismo build de producción) y en el runner de 2 cores costaba más de 10 minutos. `typecheck` de `apps/web` genera los tipos de rutas con `next typegen` antes de `tsc`, así que las rutas tipadas se validan sin `next build`. El job `e2e` cachea los navegadores de Playwright (`~/.cache/ms-playwright`, por lockfile) y la caché de compilación de Next (`apps/web/.next/cache`). Turbo usa la remote cache de Vercel si están configuradas `TURBO_TOKEN` y `TURBO_TEAM` (ver `docs/ambientes-y-deploy.md`): `lint`, `typecheck` y `test` que ya pasaron en local sobre la misma revisión se reproducen en CI desde la caché. Para eso `CI` no forma parte del hash (solo lo lee Playwright) y `TEST_DATABASE_URL` es `passThroughEnv`.

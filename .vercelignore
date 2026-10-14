@@ -1,0 +1,8 @@
+node_modules
+.turbo
+.vercel
+**/.next
+**/dist
+**/playwright-report
+**/test-results
+**/coverage
