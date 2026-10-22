@@ -172,10 +172,66 @@
         "properties": {
           "name": {
             "type": "string"
+          },
+          "turnos": {
+            "type": "object",
+            "properties": {
+              "MANANA": {
+                "type": "object",
+                "properties": {
+                  "inicio": {
+                    "type": "string"
+                  },
+                  "fin": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "inicio",
+                  "fin"
+                ]
+              },
+              "TARDE": {
+                "type": "object",
+                "properties": {
+                  "inicio": {
+                    "type": "string"
+                  },
+                  "fin": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "inicio",
+                  "fin"
+                ]
+              },
+              "NOCHE": {
+                "type": "object",
+                "properties": {
+                  "inicio": {
+                    "type": "string"
+                  },
+                  "fin": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "inicio",
+                  "fin"
+                ]
+              }
+            },
+            "required": [
+              "MANANA",
+              "TARDE",
+              "NOCHE"
+            ]
           }
         },
         "required": [
-          "name"
+          "name",
+          "turnos"
         ]
       },
       "Member": {
@@ -1239,6 +1295,82 @@
           "clase"
         ]
       },
+      "SesionQr": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "description": "Firmado; es lo que codifica el QR"
+          },
+          "aula": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "codigo": {
+                "type": "string"
+              },
+              "edificio": {
+                "type": "string"
+              },
+              "piso": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "codigo",
+              "edificio",
+              "piso"
+            ]
+          },
+          "fecha": {
+            "type": "string",
+            "description": "yyyy-mm-dd en hora argentina"
+          },
+          "turno": {
+            "type": "string",
+            "enum": [
+              "MANANA",
+              "TARDE",
+              "NOCHE"
+            ]
+          },
+          "turnoInicio": {
+            "type": "string"
+          },
+          "turnoFin": {
+            "type": "string"
+          },
+          "emitidoEn": {
+            "type": "string"
+          },
+          "venceEn": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "token",
+          "aula",
+          "fecha",
+          "turno",
+          "turnoInicio",
+          "turnoFin",
+          "emitidoEn",
+          "venceEn"
+        ]
+      },
+      "ClasesDelTurno": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Clase"
+        }
+      },
       "DailyCronResult": {
         "type": "object",
         "properties": {
@@ -1547,6 +1679,67 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 100
+                  },
+                  "turnos": {
+                    "type": "object",
+                    "properties": {
+                      "MANANA": {
+                        "type": "object",
+                        "properties": {
+                          "inicio": {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                          },
+                          "fin": {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                          }
+                        },
+                        "required": [
+                          "inicio",
+                          "fin"
+                        ]
+                      },
+                      "TARDE": {
+                        "type": "object",
+                        "properties": {
+                          "inicio": {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                          },
+                          "fin": {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                          }
+                        },
+                        "required": [
+                          "inicio",
+                          "fin"
+                        ]
+                      },
+                      "NOCHE": {
+                        "type": "object",
+                        "properties": {
+                          "inicio": {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                          },
+                          "fin": {
+                            "type": "string",
+                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                          }
+                        },
+                        "required": [
+                          "inicio",
+                          "fin"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "MANANA",
+                      "TARDE",
+                      "NOCHE"
+                    ]
                   }
                 }
               }
@@ -5076,6 +5269,234 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SolicitudAula"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permiso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error de validación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/qr/sesiones": {
+      "post": {
+        "tags": [
+          "QR de asistencia"
+        ],
+        "summary": "Generar un código QR de asistencia para un aula, turno y fecha",
+        "description": "Solo Bedel. Cada llamada emite un código nuevo y lo registra como Sesión de QR. Vence a los 60 s o al fin del turno, lo primero. 422 si la institución está Cerrada, la fecha o el turno ya pasaron o el aula no tiene clases presenciales en el turno.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "aulaId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "turno": {
+                    "type": "string",
+                    "enum": [
+                      "MANANA",
+                      "TARDE",
+                      "NOCHE"
+                    ]
+                  },
+                  "fecha": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  }
+                },
+                "required": [
+                  "aulaId",
+                  "turno",
+                  "fecha"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sesión de QR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SesionQr"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permiso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error de validación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/qr/clases": {
+      "get": {
+        "tags": [
+          "QR de asistencia"
+        ],
+        "summary": "Clases del aula en un turno",
+        "description": "Solo Bedel. Clases presenciales, no suspendidas ni finalizadas, de la fecha, cuya franja se superpone con el turno.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "aulaId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MANANA",
+                "TARDE",
+                "NOCHE"
+              ]
+            },
+            "required": true,
+            "name": "turno",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "required": true,
+            "name": "fecha",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clases del turno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClasesDelTurno"
                 }
               }
             }
