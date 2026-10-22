@@ -19,6 +19,7 @@ import { memberRoutes } from "./routes/members";
 import { novedadRoutes } from "./routes/novedades";
 import { preferenciaRoutes } from "./routes/preferencias";
 import { settingsRoutes } from "./routes/settings";
+import { solicitudAulaRoutes } from "./routes/solicitudes-aula";
 import { measureRequest } from "./timing";
 
 export const apiBasePath = "/api/v1";
@@ -105,6 +106,7 @@ export const createApi = ({ defer }: CreateApiOptions = {}) => {
     .route("/materias", materiaRoutes)
     .route("/comisiones", comisionRoutes)
     .route("/aulas", aulaRoutes)
+    .route("/solicitudes-aula", solicitudAulaRoutes)
     .route("/cron", cronRoutes);
 };
 
