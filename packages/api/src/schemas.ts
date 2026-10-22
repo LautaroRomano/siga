@@ -17,6 +17,7 @@ import {
   segmentoAvisoSchema,
   tipoNovedadSchema,
   turnoSchema,
+  validacionPresenciaSchema,
 } from "@repo/domain";
 
 export const errorSchema = z
@@ -79,6 +80,14 @@ export const settingsSchema = z
       TARDE: franjaTurnoDtoSchema,
       NOCHE: franjaTurnoDtoSchema,
     }),
+    presencia: z.object({
+      latitud: z.number(),
+      longitud: z.number(),
+      radioMetros: z.number().int(),
+      redes: z
+        .array(z.string())
+        .openapi({ description: "Rangos CIDR IPv4 de la red institucional" }),
+    }),
   })
   .openapi("Settings");
 export type SettingsDto = z.infer<typeof settingsSchema>;
@@ -128,7 +137,11 @@ export const cronResultSchema = z
   .openapi("CronResult");
 
 export const dailyCronResultSchema = z
-  .object({ emails: cronResultSchema, purgedRateLimitBuckets: z.number() })
+  .object({
+    emails: cronResultSchema,
+    purgedRateLimitBuckets: z.number(),
+    purgedIntentosAsistencia: z.number(),
+  })
   .openapi("DailyCronResult");
 export type DailyCronResultDto = z.infer<typeof dailyCronResultSchema>;
 
@@ -228,6 +241,21 @@ export const asistenciaSchema = z
   })
   .openapi("Asistencia");
 export type AsistenciaDto = z.infer<typeof asistenciaSchema>;
+
+export const registroQrResultadoSchema = z
+  .object({
+    asistencia: asistenciaSchema,
+    yaRegistrada: z.boolean().openapi({
+      description: "true si la clase ya tenía asistencia (QR o manual): no se duplica",
+    }),
+    aula: aulaResumenSchema,
+    turno: turnoSchema,
+    validacion: validacionPresenciaSchema
+      .nullable()
+      .openapi({ description: "Cómo se validó la presencia; null si ya estaba registrada" }),
+  })
+  .openapi("RegistroQr");
+export type RegistroQrResultadoDto = z.infer<typeof registroQrResultadoSchema>;
 
 export const claseSchema = z
   .object({
