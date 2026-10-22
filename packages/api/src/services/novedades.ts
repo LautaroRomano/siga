@@ -20,6 +20,7 @@ import { registrarCambioMasivo } from "./auditoria";
 import { finalizarClasesVencidas } from "./clases";
 import { notificarNovedadPublicada } from "./notificaciones";
 import { accesoDenegado, assertPerfil, esBedel } from "./permisos";
+import { bloquearAula, estadosSinSolicitud } from "./solicitudes-aula";
 
 const novedadInclude = {
   aulaNueva: { select: { id: true, codigo: true, edificio: true, piso: true } },
@@ -94,6 +95,7 @@ const assertAulaLibre = async (
   aulaId: string,
   clases: { id: string; inicio: Date; fin: Date }[],
 ) => {
+  await bloquearAula(tx, aulaId);
   for (const clase of clases) {
     const ocupada = await tx.claseProgramada.findFirst({
       where: {
@@ -101,11 +103,40 @@ const assertAulaLibre = async (
         id: { not: clase.id },
         inicio: { lt: clase.fin },
         fin: { gt: clase.inicio },
+        estado: { notIn: [...estadosSinSolicitud] },
       },
       select: { id: true },
     });
     if (ocupada) throw conflict("El aula ya está asignada en esa franja");
   }
+};
+
+// Novedad de bedelía que acompaña, en la misma transacción, un cambio de aula hecho al
+// resolver una solicitud (RF-16): los estudiantes ven el aula nueva sin acción del docente.
+export const crearNovedadCambioAula = async (
+  tx: DbTransaction,
+  datos: {
+    organizationId: string;
+    publicadaPorId: string;
+    comisionId: string;
+    claseId: string;
+    aulaAnteriorId: string;
+    aulaNuevaId: string;
+  },
+): Promise<NovedadDto> => {
+  const novedad = await tx.novedad.create({
+    data: {
+      organizationId: datos.organizationId,
+      comisionId: datos.comisionId,
+      tipo: "CAMBIO_AULA",
+      aulaNuevaId: datos.aulaNuevaId,
+      publicadaPorId: datos.publicadaPorId,
+      publicadaPorBedelia: true,
+      clases: { create: { claseId: datos.claseId, aulaAnteriorId: datos.aulaAnteriorId } },
+    },
+    include: novedadInclude,
+  });
+  return toNovedadDto(novedad);
 };
 
 // RF-05: una novedad sobre una o varias clases de la misma comisión. Registra quién la
