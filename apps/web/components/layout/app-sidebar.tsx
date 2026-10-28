@@ -11,7 +11,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSkeleton,
   SidebarRail,
   useSidebar,
 } from "@repo/ui/components/sidebar";
@@ -25,11 +24,9 @@ import { productName } from "@/lib/product";
 
 import { NavUser } from "./nav-user";
 import { navigationFor } from "./navigation";
-import { useOrganizationSwitch } from "./organization-switch-provider";
-import { OrganizationSwitcher } from "./organization-switcher";
 
-// Sin más de una organización no hay nada que elegir: la barra queda con la marca del
-// producto y el nombre de la institución, con link al inicio.
+// La sesión está fija en la institución: la barra muestra la marca del producto y su nombre,
+// con link al inicio.
 function AppIdentity({ institutionName }: { institutionName: string }) {
   return (
     <SidebarMenu>
@@ -58,12 +55,10 @@ export function AppSidebar({
 }: ComponentProps<typeof Sidebar> & { role: MemberRole; me: MeDto }) {
   const pathname = usePathname();
   const { data: activeMe = me } = useMe(me);
-  const { isSwitching } = useOrganizationSwitch();
   // En móvil el menú es un panel lateral: elegir una sección navega y lo cierra.
   const { setOpenMobile } = useSidebar();
   // El menú depende del perfil de SiGA; Configuración, del Administrador de la organización.
   const visibleNavigation = navigationFor(activeMe.perfil, role);
-  const hasMultipleOrganizations = activeMe.organizations.length > 1;
   const institutionName =
     activeMe.organizations.find((organization) => organization.id === activeMe.organizationId)
       ?.name ?? "";
@@ -71,51 +66,30 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        {hasMultipleOrganizations ? (
-          <OrganizationSwitcher initialMe={me} />
-        ) : (
-          <AppIdentity institutionName={institutionName} />
-        )}
+        <AppIdentity institutionName={institutionName} />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            {/* Mientras cambia de organización, el rol y el nombre en pantalla siguen siendo
-                los de la anterior hasta que el layout autenticado vuelve a renderizar: un
-                esqueleto ocupa el lugar del menú en vez de arriesgar a mostrarlos. */}
-            {isSwitching
-              ? visibleNavigation.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuSkeleton showIcon />
-                  </SidebarMenuItem>
-                ))
-              : visibleNavigation.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      tooltip={item.title}
-                      isActive={isActivePath(pathname, item.href)}
-                      render={<Link href={item.href} onClick={() => setOpenMobile(false)} />}
-                    >
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+            {visibleNavigation.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton
+                  tooltip={item.title}
+                  isActive={isActivePath(pathname, item.href)}
+                  render={<Link href={item.href} onClick={() => setOpenMobile(false)} />}
+                >
+                  <item.icon />
+                  <span>{item.title}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        {isSwitching ? (
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuSkeleton showIcon />
-            </SidebarMenuItem>
-          </SidebarMenu>
-        ) : (
-          // `activeMe` viene de la base, no de la cookie de sesión: un cambio hecho en Mi
-          // perfil se ve acá sin recargar.
-          <NavUser user={{ name: activeMe.userName, email: activeMe.userEmail }} />
-        )}
+        {/* `activeMe` viene de la base, no de la cookie de sesión: un cambio hecho en Mi perfil
+            se ve acá sin recargar. */}
+        <NavUser user={{ name: activeMe.userName, email: activeMe.userEmail }} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
