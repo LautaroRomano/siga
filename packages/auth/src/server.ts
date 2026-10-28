@@ -22,6 +22,8 @@ const passwordPaths: Record<string, "password" | "newPassword"> = {
   "/reset-password": "newPassword",
 };
 
+const requestResetPaths = new Set(["/request-password-reset", "/forget-password"]);
+
 export const deactivatedAccountMessage = "Tu cuenta está desactivada";
 
 const invitationExpiresInSeconds = 7 * 24 * 60 * 60;
@@ -105,15 +107,23 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     requireEmailVerification: true,
     resetPasswordTokenExpiresIn: linkLifetimeSeconds,
-    // El enlace de activación llega al correo de la cuenta: abrirlo lo verifica.
+    revokeSessionsOnPasswordReset: true,
+    // Una cuenta sin verificar recibe el enlace de activación (abrirlo verifica el correo); una
+    // verificada, el de recuperación.
     sendResetPassword: ({ user, token }) => {
-      const email = {
+      const emails = authEmails();
+      if (user.emailVerified) {
+        return emails.sendPasswordReset({
+          to: user.email,
+          name: user.name,
+          url: `${appOrigin}/definir-contrasena?token=${token}`,
+        });
+      }
+      return emails.sendActivation({
         to: user.email,
         name: user.name,
         url: `${appOrigin}/activar-cuenta?token=${token}&email=${encodeURIComponent(user.email)}`,
-      };
-      const emails = authEmails();
-      return user.emailVerified ? emails.sendPasswordReset(email) : emails.sendActivation(email);
+      });
     },
     onPasswordReset: async ({ user }) => {
       await prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } });
@@ -130,6 +140,12 @@ export const auth = betterAuth({
     // Better Auth exige un handler async aunque la validación no espere nada.
     // eslint-disable-next-line @typescript-eslint/require-await
     before: createAuthMiddleware(async (ctx) => {
+      // El pedido de recuperación pasa por la API de SiGA (límites, cuentas desactivadas, 60
+      // minutos): por HTTP directo se omitiría todo eso. `auth.api.*` desde el servidor no
+      // trae `request`.
+      if (ctx.request && requestResetPaths.has(ctx.path)) {
+        throw new APIError("NOT_FOUND", { message: "Not found" });
+      }
       const field = passwordPaths[ctx.path];
       if (!field) return;
       const password = (ctx.body as Record<string, unknown> | undefined)?.[field];

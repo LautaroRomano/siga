@@ -13,6 +13,7 @@ import { aulaRoutes } from "./routes/aulas";
 import { avisoRoutes } from "./routes/avisos";
 import { claseRoutes } from "./routes/clases";
 import { cronRoutes } from "./routes/cron";
+import { cuentaRoutes } from "./routes/cuenta";
 import {
   carreraRoutes,
   comisionRoutes,
@@ -107,6 +108,7 @@ export const createApi = ({ defer }: CreateApiOptions = {}) => {
   app.use("*", requireSession);
 
   return app
+    .route("/cuenta", cuentaRoutes)
     .route("/me", meRoutes)
     .route("/settings", settingsRoutes)
     .route("/members", memberRoutes)
