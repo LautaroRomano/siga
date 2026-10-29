@@ -1,5 +1,6 @@
 import { readAuthContext } from "@repo/auth";
 import { measure, runWithAuditActor } from "@repo/db";
+import type { Perfil } from "@repo/domain";
 import { createMiddleware } from "hono/factory";
 
 import type { ApiEnv } from "./context";
@@ -7,11 +8,22 @@ import { apiEnv } from "./env";
 import { ApiError, forbidden } from "./errors";
 import { consumeRateLimit } from "./services/rate-limit";
 
-const publicPaths = ["/openapi.json", "/docs"];
+const publicPaths = [
+  "/openapi.json",
+  "/docs",
+  "/preferencias/baja-correo",
+  "/cuenta/recuperar-contrasena",
+  "/cuenta/definir-contrasena",
+];
 
 export const requireSession = createMiddleware<ApiEnv>(async (c, next) => {
   const path = c.req.path.replace(/^\/api\/v1/, "");
-  if (publicPaths.includes(path) || path.startsWith("/cron/")) return next();
+  if (
+    publicPaths.includes(path) ||
+    path.startsWith("/cron/") ||
+    path.startsWith("/cuenta/definir-contrasena/")
+  )
+    return next();
 
   const { auth, setCookies } = await measure("session", () => readAuthContext(c.req.raw.headers));
   if (!auth) throw new ApiError(401, "UNAUTHORIZED", "Iniciá sesión para continuar");
@@ -30,6 +42,14 @@ export const ownerOnly = createMiddleware<ApiEnv>(async (c, next) => {
   await next();
 });
 
+// Las rutas de SiGA declaran qué perfiles las usan (matriz de permisos de
+// `docs/producto/requerimientos.md`); el servicio vuelve a verificarlo y audita el rechazo.
+export const perfilOnly = (...perfiles: Perfil[]) =>
+  createMiddleware<ApiEnv>(async (c, next) => {
+    if (!perfiles.includes(c.get("auth").perfil)) throw forbidden("Acceso denegado");
+    await next();
+  });
+
 export const requireCronSecret = createMiddleware(async (c, next) => {
   const header = c.req.header("authorization") ?? "";
   if (!apiEnv.cronSecret || header !== `Bearer ${apiEnv.cronSecret}`) {
@@ -38,7 +58,7 @@ export const requireCronSecret = createMiddleware(async (c, next) => {
   await next();
 });
 
-const clientIp = (headers: Headers) =>
+export const clientIp = (headers: Headers) =>
   headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
   headers.get("x-real-ip")?.trim() ||
   "local";

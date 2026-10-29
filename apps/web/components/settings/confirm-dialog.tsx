@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
 } from "@repo/ui/components/alert-dialog";
 import { Spinner } from "@repo/ui/components/spinner";
+import type { ReactNode } from "react";
 
 // Confirmación de una acción irreversible: mientras corre no se puede cerrar.
 export function ConfirmDialog({
@@ -20,7 +21,9 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   pending,
+  confirmDisabled = false,
   onConfirm,
+  children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -28,7 +31,9 @@ export function ConfirmDialog({
   description: string;
   confirmLabel: string;
   pending: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
+  children?: ReactNode;
 }) {
   return (
     <AlertDialog open={open} onOpenChange={(next) => !next && !pending && onOpenChange(false)}>
@@ -37,9 +42,14 @@ export function ConfirmDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {children}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>Volver</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" disabled={pending} onClick={onConfirm}>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={pending || confirmDisabled}
+            onClick={onConfirm}
+          >
             {pending ? <Spinner /> : null}
             {confirmLabel}
           </AlertDialogAction>

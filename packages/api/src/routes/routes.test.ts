@@ -1,13 +1,18 @@
 import type * as Auth from "@repo/auth";
-import { prisma } from "@repo/db";
+import { prisma, toDateColumn } from "@repo/db";
+import { fechaArgentina } from "@repo/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiBasePath, createApi } from "../app";
 import {
+  authOf,
+  createClase,
+  createInstitution,
   createMember,
   createOrganization,
+  createUserWithPerfil,
   resetDatabase,
-  signInAs,
+  seedAcademicFixture,
   type TestOrganization,
 } from "../test/db";
 
@@ -34,12 +39,17 @@ const call = (path: string, init?: RequestInit) =>
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
   });
 
-const json = (body: unknown, method = "POST") => ({ method, body: JSON.stringify(body) });
+const json = (body: unknown, method = "POST", headers: Record<string, string> = {}) => ({
+  method,
+  body: JSON.stringify(body),
+  headers,
+});
 
 const ownerAuthOf = (test: TestOrganization): Auth.AuthContext => ({
   userId: test.userId,
   organizationId: test.organizationId,
   role: "owner",
+  perfil: "BEDEL",
   userName: `Usuario ${test.userId}`,
   userEmail: test.userEmail,
   lostOrganization: null,
@@ -72,18 +82,21 @@ describe("contrato HTTP", () => {
   });
 
   it("valida el body con 422 y detalle por campo", async () => {
-    const response = await call("/invitations", json({ email: "no-es-un-email" }));
+    const response = await call(
+      "/usuarios",
+      json({ nombre: "Ana", dni: "30123456", correo: "no-es-un-email", perfil: "DOCENTE" }),
+    );
     expect(response.status).toBe(422);
     const body = (await response.json()) as { error: { code: string; issues: { path: string }[] } };
     expect(body.error.code).toBe("VALIDATION");
-    expect(body.error.issues.map((issue) => issue.path)).toEqual(["email"]);
+    expect(body.error.issues.map((issue) => issue.path)).toEqual(["correo"]);
   });
 
   it("responde 404 con el formato de error en una ruta inexistente de un recurso", async () => {
-    const response = await call("/invitations/no-existe");
+    const response = await call("/usuarios/no-existe", json({ nombre: "Ana" }, "PATCH"));
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({
-      error: { code: "NOT_FOUND", message: "Invitación no encontrado" },
+      error: { code: "NOT_FOUND", message: "Usuario no encontrado" },
     });
   });
 
@@ -97,17 +110,25 @@ describe("contrato HTTP", () => {
     expect(await daily.json()).toEqual({
       emails: { processed: 0, failed: 0 },
       purgedRateLimitBuckets: 0,
+      purgedIntentosAsistencia: 0,
     });
   });
 
   it("ajustes: lee el nombre, lo cambia con validación y lo refleja en quién soy", async () => {
-    expect(await (await call("/settings")).json()).toEqual({
+    expect(await (await call("/settings")).json()).toMatchObject({
       name: organization.organizationName,
+      turnos: { NOCHE: { inicio: "18:00", fin: "23:30" } },
     });
+    const solapados = {
+      MANANA: { inicio: "07:00", fin: "13:00" },
+      TARDE: { inicio: "12:00", fin: "18:00" },
+      NOCHE: { inicio: "18:00", fin: "23:30" },
+    };
+    expect((await call("/settings", json({ turnos: solapados }, "PATCH"))).status).toBe(422);
     expect((await call("/settings", json({ name: "   " }, "PATCH"))).status).toBe(422);
     const renamed = await call("/settings", json({ name: "  Organización QA  " }, "PATCH"));
     expect(renamed.status).toBe(200);
-    expect(await renamed.json()).toEqual({ name: "Organización QA" });
+    expect(await renamed.json()).toMatchObject({ name: "Organización QA" });
     const me = (await (await call("/me")).json()) as { organizations: { name: string }[] };
     expect(me.organizations[0]?.name).toBe("Organización QA");
   });
@@ -121,55 +142,6 @@ describe("contrato HTTP", () => {
       await prisma.user.findUniqueOrThrow({ where: { id: organization.userId } }),
     ).toMatchObject({
       name: "Ana Pérez",
-    });
-  });
-
-  it("invita, lista, reenvía y cancela; la invitación se lee y solo la acepta el invitado", async () => {
-    const headers = Object.fromEntries(await signInAs(organization.userId));
-    const invited = await call("/invitations", { ...json({ email: "Ana@x.com" }), headers });
-    expect(invited.status).toBe(201);
-    const invitation = (await invited.json()) as { id: string; email: string };
-    expect(invitation.email).toBe("ana@x.com");
-    expect((await call("/invitations", { ...json({ email: "ana@x.com" }), headers })).status).toBe(
-      409,
-    );
-
-    const listed = await call("/invitations");
-    expect(listed.status).toBe(200);
-    expect(await listed.json()).toEqual([expect.objectContaining({ id: invitation.id })]);
-
-    const resent = await call(`/invitations/${invitation.id}/resend`, { method: "POST", headers });
-    expect(resent.status).toBe(200);
-    expect(await resent.json()).toMatchObject({ id: invitation.id });
-    expect(await prisma.emailOutbox.count()).toBe(2);
-
-    const read = await call(`/invitations/${invitation.id}`, { headers });
-    expect(read.status).toBe(200);
-    expect(await read.json()).toMatchObject({ status: "PENDING", forCurrentUser: false });
-    const accepted = await call(`/invitations/${invitation.id}/accept`, {
-      method: "POST",
-      headers,
-    });
-    expect(accepted.status).toBe(403);
-    expect(await accepted.json()).toEqual({
-      error: {
-        code: "YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION",
-        message: "Esta invitación es para otro email",
-      },
-    });
-
-    const cancelled = await call(`/invitations/${invitation.id}/cancel`, {
-      method: "POST",
-      headers,
-    });
-    expect(cancelled.status).toBe(200);
-    expect(await cancelled.json()).toEqual({ ok: true });
-    expect(await (await call("/invitations")).json()).toEqual([]);
-    expect(
-      (await call(`/invitations/${invitation.id}/resend`, { method: "POST", headers })).status,
-    ).toBe(404);
-    expect(await (await call(`/invitations/${invitation.id}`, { headers })).json()).toMatchObject({
-      status: "CANCELED",
     });
   });
 
@@ -188,15 +160,70 @@ describe("contrato HTTP", () => {
     expect(await (await call("/members")).json()).toHaveLength(1);
   });
 
+  it("la recuperación de contraseña es pública y se limita por IP", async () => {
+    const pedir = (correo: string) =>
+      call(
+        "/cuenta/recuperar-contrasena",
+        json({ correo }, "POST", { "x-forwarded-for": "203.0.113.9" }),
+      );
+    for (let pedido = 1; pedido <= 5; pedido += 1) {
+      const response = await pedir(`otro${pedido}@example.com`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ ok: true });
+    }
+    const limitada = await pedir("otro6@example.com");
+    expect(limitada.status).toBe(429);
+    expect(await limitada.json()).toMatchObject({ error: { code: "RATE_LIMITED" } });
+  });
+
+  it("definir la contraseña valida la política y el enlace sin pedir sesión", async () => {
+    const distintas = await call(
+      "/cuenta/definir-contrasena",
+      json({ token: "t", contrasena: "nueva1234", confirmacion: "otra1234" }),
+    );
+    expect(distintas.status).toBe(422);
+    expect(await distintas.json()).toMatchObject({
+      error: { issues: [{ path: "confirmacion", message: "Las contraseñas no coinciden." }] },
+    });
+    const invalido = await call(
+      "/cuenta/definir-contrasena",
+      json({ token: "inventado", contrasena: "nueva1234", confirmacion: "nueva1234" }),
+    );
+    expect(invalido.status).toBe(400);
+    expect(await invalido.json()).toMatchObject({
+      error: { message: "El enlace venció o ya fue usado." },
+    });
+  });
+
   it("el spec OpenAPI incluye todos los recursos", async () => {
     const spec = (await (await call("/openapi.json")).json()) as { paths: Record<string, unknown> };
     for (const path of [
       "/api/v1/me",
+      "/api/v1/cuenta/recuperar-contrasena",
+      "/api/v1/cuenta/definir-contrasena",
       "/api/v1/settings",
       "/api/v1/members",
-      "/api/v1/invitations",
-      "/api/v1/invitations/{id}/accept",
+      "/api/v1/usuarios",
+      "/api/v1/usuarios/dominios",
+      "/api/v1/usuarios/{id}/desactivar",
       "/api/v1/cron/daily",
+      "/api/v1/estado-institucional",
+      "/api/v1/estado-institucional/historial",
+      "/api/v1/clases",
+      "/api/v1/clases/{id}",
+      "/api/v1/novedades",
+      "/api/v1/novedades/{id}/finalizar",
+      "/api/v1/historico/novedades",
+      "/api/v1/historico/uso-aulas",
+      "/api/v1/historico/incidencias",
+      "/api/v1/historico/opciones",
+      "/api/v1/preferencias",
+      "/api/v1/carreras",
+      "/api/v1/materias",
+      "/api/v1/comisiones",
+      "/api/v1/comisiones/generar-clases",
+      "/api/v1/aulas/disponibles",
+      "/api/v1/aulas/plano",
     ]) {
       expect(spec.paths).toHaveProperty(path);
     }
@@ -240,17 +267,649 @@ describe("rol de miembro", () => {
     asLinked();
     expect((await call("/settings", json({ name: "Otra" }, "PATCH"))).status).toBe(403);
     asLinked();
-    expect((await call("/invitations", json({ email: "x@x.com" }))).status).toBe(403);
-    asLinked();
-    expect((await call("/invitations")).status).toBe(403);
-    asLinked();
     expect((await call(`/members/${organization.userId}`, { method: "DELETE" })).status).toBe(403);
 
     asLinked();
     const settings = await call("/settings");
     expect(settings.status).toBe(200);
-    expect(await settings.json()).toEqual({ name: organization.organizationName });
+    expect(await settings.json()).toMatchObject({ name: organization.organizationName });
     asLinked();
     expect((await call("/members")).status).toBe(200);
+  });
+});
+
+describe("SiGA: perfiles y flujo principal por HTTP", () => {
+  it("cada ruta responde 403 a los perfiles que no la usan, y 422 con detalle por campo", async () => {
+    const institution = await createInstitution();
+    const estudiante = await createUserWithPerfil(institution, "ESTUDIANTE");
+    const docente = await createUserWithPerfil(institution, "DOCENTE");
+    const como = (user: Parameters<typeof authOf>[1]) =>
+      getAuthContext.mockResolvedValueOnce(authOf(institution, user));
+
+    como(estudiante);
+    expect(
+      (await call("/estado-institucional", json({ estado: "CERRADA", motivo: "x" }))).status,
+    ).toBe(403);
+    como(estudiante);
+    expect((await call("/novedades")).status).toBe(403);
+    como(docente);
+    expect((await call("/historico/novedades?desde=2026-01-01&hasta=2026-01-31")).status).toBe(403);
+    como(estudiante);
+    expect((await call("/historico/opciones")).status).toBe(403);
+    como(docente);
+    expect((await call("/historico/uso-aulas?desde=2026-01-01&hasta=2026-01-31")).status).toBe(403);
+    como(institution);
+    const usoAulas = await call("/historico/uso-aulas?desde=2026-02-01&hasta=2026-01-01");
+    expect(usoAulas.status).toBe(422);
+    const issuesUsoAulas = (await usoAulas.json()) as {
+      error: { issues: { path: string; message: string }[] };
+    };
+    expect(issuesUsoAulas.error.issues).toEqual([
+      expect.objectContaining({
+        path: "desde",
+        message: "La fecha desde no puede ser posterior a la fecha hasta",
+      }),
+    ]);
+    como(institution);
+    expect((await call("/historico/uso-aulas?desde=2026-01-01&hasta=2026-01-31")).status).toBe(200);
+    como(estudiante);
+    expect((await call("/historico/incidencias?desde=2026-01-01&hasta=2026-01-31")).status).toBe(
+      403,
+    );
+    como(institution);
+    const incidencias = await call("/historico/incidencias?desde=2024-01-01&hasta=2026-01-01");
+    expect(incidencias.status).toBe(422);
+    como(institution);
+    expect((await call("/historico/incidencias?desde=2026-01-01&hasta=2026-01-31")).status).toBe(
+      200,
+    );
+    como(docente);
+    expect((await call("/preferencias")).status).toBe(403);
+    como(docente);
+    expect((await call("/comisiones/generar-clases", json({}))).status).toBe(403);
+    for (const perfil of [docente, estudiante]) {
+      como(perfil);
+      expect((await call("/aulas")).status).toBe(403);
+      como(perfil);
+      expect((await call("/aulas", json({}))).status).toBe(403);
+      como(perfil);
+      expect((await call("/aulas/x/baja", json({}))).status).toBe(403);
+      como(perfil);
+      expect((await call("/aulas/plano")).status).toBe(200);
+    }
+
+    como(institution);
+    const aula = { codigo: "Aula 99", edificio: "Edificio A", piso: "PB", capacidad: 35 };
+    const creada = await call("/aulas", json(aula));
+    expect(creada.status).toBe(201);
+    como(institution);
+    expect((await call("/aulas", json(aula))).status).toBe(409);
+    como(institution);
+    const fueraDeRango = await call("/aulas", json({ ...aula, codigo: "Otra", capacidad: 501 }));
+    expect(fueraDeRango.status).toBe(422);
+    const errores = (await fueraDeRango.json()) as { error: { issues: { path: string }[] } };
+    expect(errores.error.issues.map((issue) => issue.path)).toEqual(["capacidad"]);
+    como(docente);
+    const qr = { aulaId: "x", turno: "NOCHE", fecha: "2026-10-26" };
+    expect((await call("/qr/sesiones", json(qr))).status).toBe(403);
+    como(estudiante);
+    expect((await call("/qr/clases?aulaId=x&turno=NOCHE&fecha=2026-10-26")).status).toBe(403);
+
+    como(institution);
+    expect((await call("/qr/sesiones", json({ ...qr, turno: "MADRUGADA" }))).status).toBe(422);
+    como(institution);
+    const invalido = await call("/estado-institucional", json({ estado: "CERRADA" }));
+    expect(invalido.status).toBe(422);
+    const body = (await invalido.json()) as { error: { issues: { path: string }[] } };
+    expect(body.error.issues.map((issue) => issue.path)).toEqual(["motivo"]);
+    como(docente);
+    const demora = await call("/novedades", json({ claseIds: ["x"], tipo: "DEMORA" }));
+    expect(demora.status).toBe(422);
+  });
+
+  it("el bedel genera un QR y lista las clases del turno por HTTP", async () => {
+    const institution = await createInstitution();
+    const fixture = await seedAcademicFixture(institution);
+    const fecha = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await createClase(institution, fixture, fecha, "19:00", "23:00");
+    getAuthContext.mockResolvedValue(authOf(institution, institution));
+    const consulta = `aulaId=${fixture.aulaId}&turno=NOCHE&fecha=${fecha}`;
+
+    const clases = await call(`/qr/clases?${consulta}`);
+    expect(clases.status).toBe(200);
+    expect(await clases.json()).toHaveLength(1);
+    const sesion = await call(
+      "/qr/sesiones",
+      json({ aulaId: fixture.aulaId, turno: "NOCHE", fecha }),
+    );
+    expect(sesion.status).toBe(201);
+    expect(await sesion.json()).toMatchObject({ turno: "NOCHE", aula: { id: fixture.aulaId } });
+  });
+
+  it("el registro por QR es del docente: 403 al resto, 422 con detalle por campo y 422 por código inválido", async () => {
+    const institution = await createInstitution();
+    const fixture = await seedAcademicFixture(institution);
+    const ubicacion = { latitud: -26.8, longitud: -65.2, precisionMetros: 10 };
+
+    getAuthContext.mockResolvedValueOnce(authOf(institution, institution));
+    expect((await call("/asistencias/qr", json({ token: "x" }))).status).toBe(403);
+    getAuthContext.mockResolvedValue(authOf(institution, fixture.docente));
+    const vacio = await call("/asistencias/qr", json({ token: "" }));
+    expect(vacio.status).toBe(422);
+    const errores = (await vacio.json()) as { error: { issues: { path: string }[] } };
+    expect(errores.error.issues.map((issue) => issue.path)).toEqual(["token"]);
+    const invalido = await call("/asistencias/qr", json({ token: "alterado", ubicacion }));
+    expect(invalido.status).toBe(422);
+    expect(await invalido.json()).toMatchObject({
+      error: { message: expect.stringContaining("El código QR no es válido") },
+    });
+  });
+
+  it("los ajustes devuelven y guardan la presencia; un radio inválido da 422 y no guarda", async () => {
+    const institution = await createInstitution();
+    getAuthContext.mockResolvedValue(authOf(institution, institution));
+    const presencia = { latitud: -26.8, longitud: -65.2, radioMetros: 120, redes: ["10.0.0.0/8"] };
+
+    const inicial = await call("/settings");
+    expect(await inicial.json()).toMatchObject({ presencia: { radioMetros: 200, redes: [] } });
+    const invalido = await call(
+      "/settings",
+      json({ presencia: { ...presencia, radioMetros: 0 } }, "PATCH"),
+    );
+    expect(invalido.status).toBe(422);
+    const guardado = await call("/settings", json({ presencia }, "PATCH"));
+    expect(await guardado.json()).toMatchObject({ presencia });
+  });
+
+  it("el bedel registra la asistencia manual por HTTP y los demás perfiles reciben 403", async () => {
+    const institution = await createInstitution();
+    const fixture = await seedAcademicFixture(institution);
+    const hoy = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const clase = await createClase(institution, fixture, hoy, "00:00", "23:59");
+    const registro = {
+      claseId: clase.id,
+      docenteId: fixture.docente.userId,
+      horaLlegada: "00:00",
+      motivo: "Sin batería",
+    };
+
+    getAuthContext.mockResolvedValueOnce(authOf(institution, fixture.docente));
+    expect((await call("/asistencias/manual", json(registro))).status).toBe(403);
+    getAuthContext.mockResolvedValueOnce(authOf(institution, institution));
+    const invalido = await call("/asistencias/manual", json({ ...registro, motivo: " " }));
+    expect(invalido.status).toBe(422);
+    getAuthContext.mockResolvedValue(authOf(institution, institution));
+    const creada = await call("/asistencias/manual", json(registro));
+    expect(creada.status).toBe(201);
+    expect(await creada.json()).toMatchObject({ metodo: "MANUAL", motivo: "Sin batería" });
+    const repetida = await call("/asistencias/manual", json(registro));
+    expect(repetida.status).toBe(409);
+    expect(await repetida.json()).toMatchObject({
+      error: { message: "Esta clase ya tiene asistencia registrada: Registro manual a las 00:00." },
+    });
+    const detalle = await call(`/clases/${clase.id}`);
+    expect(await detalle.json()).toMatchObject({
+      estado: "DOCENTE_PRESENTE",
+      asistencia: { metodo: "MANUAL", registradaPor: { id: institution.userId } },
+    });
+  });
+
+  it("bedel cierra la institución, docente publica una demora y el estudiante la ve en sus clases", async () => {
+    const institution = await createInstitution();
+    const fixture = await seedAcademicFixture(institution);
+    const estudiante = await createUserWithPerfil(institution, "ESTUDIANTE");
+    const manana = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const clase = await createClase(institution, fixture, manana, "08:00", "10:00");
+    const como = (user: Parameters<typeof authOf>[1]) =>
+      getAuthContext.mockResolvedValueOnce(authOf(institution, user));
+
+    como(estudiante);
+    expect(await (await call("/estado-institucional")).json()).toMatchObject({ estado: "ABIERTA" });
+    como(institution);
+    const cerrada = await call(
+      "/estado-institucional",
+      json({ estado: "ABIERTA_CON_NOVEDADES", motivo: "Paro de transporte" }),
+    );
+    expect(cerrada.status).toBe(201);
+    expect(await cerrada.json()).toMatchObject({
+      estado: { estado: "ABIERTA_CON_NOVEDADES", usuario: { id: institution.userId } },
+      clasesSuspendidas: 0,
+    });
+
+    como(estudiante);
+    const preferencias = await call(
+      "/preferencias",
+      json({ comisionIds: [fixture.comisionId] }, "PUT"),
+    );
+    expect(preferencias.status).toBe(200);
+
+    como(fixture.docente);
+    const publicada = await call(
+      "/novedades",
+      json({ claseIds: [clase.id], tipo: "DEMORA", minutosDemora: "15", mensaje: "Arranco 8:15" }),
+    );
+    expect(publicada.status).toBe(201);
+
+    como(estudiante);
+    const clases = await call(`/clases?fecha=${manana}&anio=5`);
+    expect(clases.status).toBe(200);
+    expect(await clases.json()).toMatchObject({
+      fecha: manana,
+      clases: [
+        {
+          id: clase.id,
+          estado: "DEMORADA",
+          novedades: [{ tipo: "DEMORA", minutosDemora: 15, mensaje: "Arranco 8:15" }],
+        },
+      ],
+    });
+    como(estudiante);
+    expect(await (await call(`/aulas/disponibles?claseIds=${clase.id}`)).json()).toEqual([
+      expect.objectContaining({ codigo: "Aula 7" }),
+      expect.objectContaining({ codigo: "Aula 12" }),
+    ]);
+    como(estudiante);
+    expect((await call("/clases?anio=9")).status).toBe(422);
+  });
+});
+
+describe("avisos institucionales por HTTP", () => {
+  const nuevoAviso = {
+    titulo: "Corte de luz",
+    cuerpo: "Hoy no hay clases",
+    destinatarios: { todos: true, perfiles: [], carreraIds: [], anios: [], comisionIds: [] },
+    hasta: new Date(Date.now() + 3_600_000).toISOString(),
+  };
+
+  it("publica Bedel y el resto recibe 403; los datos inválidos devuelven 422 con el texto exacto", async () => {
+    const institution = await createInstitution();
+    const estudiante = await createUserWithPerfil(institution, "ESTUDIANTE");
+    const docente = await createUserWithPerfil(institution, "DOCENTE");
+    for (const perfil of [estudiante, docente]) {
+      getAuthContext.mockResolvedValueOnce(authOf(institution, perfil));
+      expect((await call("/avisos", json(nuevoAviso))).status).toBe(403);
+      getAuthContext.mockResolvedValueOnce(authOf(institution, perfil));
+      expect((await call("/avisos/x/notificaciones")).status).toBe(403);
+      getAuthContext.mockResolvedValueOnce(authOf(institution, perfil));
+      expect((await call("/avisos?vista=PUBLICADOS")).status).toBe(403);
+    }
+
+    getAuthContext.mockResolvedValue(authOf(institution, institution));
+    const invalido = await call("/avisos", json({ ...nuevoAviso, titulo: "", hasta: "" }));
+    expect(invalido.status).toBe(422);
+    expect(await invalido.json()).toMatchObject({
+      error: {
+        issues: [
+          { path: "titulo", message: "Ingresá el título" },
+          { path: "hasta", message: "Indicá hasta cuándo está vigente" },
+        ],
+      },
+    });
+
+    const creado = await call("/avisos", json(nuevoAviso));
+    expect(creado.status).toBe(201);
+    getAuthContext.mockResolvedValue(authOf(institution, estudiante));
+    const vigentes = await call("/avisos");
+    expect(await vigentes.json()).toMatchObject([{ titulo: "Corte de luz", prioridad: "NORMAL" }]);
+  });
+});
+
+describe("baja de correos sin sesión", () => {
+  it("con token válido desactiva la opción y con uno alterado responde 400", async () => {
+    const institution = await createInstitution();
+    const estudiante = await createUserWithPerfil(institution, "ESTUDIANTE");
+    await prisma.userProfile.update({
+      where: { userId: estudiante.userId },
+      data: { notificarNovedadesPorCorreo: true },
+    });
+    getAuthContext.mockResolvedValue(null);
+    const { crearTokenBajaNovedades } = await import("../services/notificaciones");
+    const token = crearTokenBajaNovedades(estudiante.userId);
+
+    const alterada = await call("/preferencias/baja-correo", json({ token: `${token}x` }));
+    expect(alterada.status).toBe(400);
+    expect(await alterada.json()).toMatchObject({
+      error: { message: "El enlace para dejar de recibir correos no es válido." },
+    });
+
+    const valida = await call("/preferencias/baja-correo", json({ token }));
+    expect(valida.status).toBe(200);
+    expect(await valida.json()).toEqual({ ok: true, tipo: "novedades" });
+    expect(
+      (await prisma.userProfile.findUniqueOrThrow({ where: { userId: estudiante.userId } }))
+        .notificarNovedadesPorCorreo,
+    ).toBe(false);
+  });
+
+  it("el token de avisos desactiva solo la opción de avisos", async () => {
+    const institution = await createInstitution();
+    const estudiante = await createUserWithPerfil(institution, "ESTUDIANTE");
+    await prisma.userProfile.update({
+      where: { userId: estudiante.userId },
+      data: { notificarNovedadesPorCorreo: true, notificarAvisosPorCorreo: true },
+    });
+    getAuthContext.mockResolvedValue(null);
+    const { crearTokenBajaAvisos } = await import("../services/notificaciones");
+
+    const respuesta = await call(
+      "/preferencias/baja-correo",
+      json({ token: crearTokenBajaAvisos(estudiante.userId) }),
+    );
+    expect(await respuesta.json()).toEqual({ ok: true, tipo: "avisos" });
+    expect(
+      await prisma.userProfile.findUniqueOrThrow({ where: { userId: estudiante.userId } }),
+    ).toMatchObject({ notificarNovedadesPorCorreo: true, notificarAvisosPorCorreo: false });
+  });
+});
+
+describe("Solicitudes de aula por HTTP", () => {
+  it("restringe a Docente y Bedel, valida alumnos con detalle y crea la solicitud", async () => {
+    const institution = await createInstitution();
+    const fixture = await seedAcademicFixture(institution);
+    const estudiante = await createUserWithPerfil(institution, "ESTUDIANTE");
+    const clase = await createClase(institution, fixture, "2099-10-14");
+    getAuthContext.mockResolvedValue(authOf(institution, estudiante));
+    expect((await call("/solicitudes-aula/clases")).status).toBe(403);
+    expect((await call("/solicitudes-aula/mias")).status).toBe(403);
+
+    getAuthContext.mockResolvedValue(authOf(institution, fixture.docente));
+    const sinAlumnos = await call(`/solicitudes-aula/aulas?claseId=${clase.id}&alumnos=0`);
+    expect(sinAlumnos.status).toBe(422);
+    expect(JSON.stringify(await sinAlumnos.json())).toContain(
+      "Ingresá una cantidad de alumnos mayor que 0.",
+    );
+
+    const busqueda = await call(
+      `/solicitudes-aula/aulas?claseId=${clase.id}&alumnos=40&recursos=Proyector`,
+    );
+    expect(busqueda.status).toBe(200);
+    expect(
+      ((await busqueda.json()) as { aulas: { codigo: string }[] }).aulas.map(
+        (aula: { codigo: string }) => aula.codigo,
+      ),
+    ).toEqual(["Aula 12"]);
+
+    const pedido = { claseId: clase.id, aulaId: fixture.otraAulaId, alumnos: 40, recursos: [] };
+    const creada = await call("/solicitudes-aula", json(pedido));
+    expect(creada.status).toBe(201);
+    expect(((await creada.json()) as { estado: string }).estado).toBe("PENDIENTE");
+    const duplicada = await call("/solicitudes-aula", json(pedido));
+    expect(duplicada.status).toBe(409);
+    expect(((await (await call("/solicitudes-aula/mias")).json()) as unknown[]).length).toBe(1);
+  });
+
+  it("las rutas de resolución y de clases sin aula son solo del Bedel", async () => {
+    const institution = await createInstitution();
+    const fixture = await seedAcademicFixture(institution);
+    const clase = await createClase(institution, fixture, "2099-10-14", "19:00", "23:00", null);
+    getAuthContext.mockResolvedValue(authOf(institution, fixture.docente));
+    const aulaId = fixture.otraAulaId;
+    for (const respuesta of [
+      await call("/solicitudes-aula?estado=PENDIENTE"),
+      await call("/solicitudes-aula/x/aprobar", json({ aulaId })),
+      await call("/solicitudes-aula/x/rechazar", json({ motivo: "No" })),
+      await call("/solicitudes-aula/x/reasignar", json({ aulaId })),
+      await call("/clases/sin-aula"),
+      await call(`/clases/${clase.id}/aula`, json({ aulaId })),
+    ]) {
+      expect(respuesta.status).toBe(403);
+    }
+
+    getAuthContext.mockResolvedValue(authOf(institution, institution));
+    const sinMotivo = await call("/solicitudes-aula/x/rechazar", json({ motivo: " " }));
+    expect(sinMotivo.status).toBe(422);
+    expect(JSON.stringify(await sinMotivo.json())).toContain("Ingresá el motivo del rechazo.");
+    const lista = await call("/clases/sin-aula");
+    expect(lista.status).toBe(200);
+    const asignada = await call(`/clases/${clase.id}/aula`, json({ aulaId }));
+    expect(asignada.status).toBe(200);
+    expect(((await asignada.json()) as { aula: { codigo: string } }).aula.codigo).toBe("Aula 7");
+  });
+});
+
+describe("Acciones del plano por HTTP", () => {
+  it("Docente y Estudiante reciben 403; Bedel y Autoridad asignan, mueven y reemplazan", async () => {
+    const institution = await createInstitution();
+    const fixture = await seedAcademicFixture(institution);
+    const hoy = fechaArgentina(new Date());
+    const enCurso = await prisma.claseProgramada.create({
+      data: {
+        organizationId: institution.organizationId,
+        comisionId: fixture.comisionId,
+        fecha: toDateColumn(hoy),
+        inicio: new Date(Date.now() - 60_000),
+        fin: new Date(Date.now() + 3_600_000),
+        aulaId: fixture.aulaId,
+      },
+    });
+    const rutas = async () => [
+      await call(`/aulas/${fixture.aulaId}/clases-asignables`),
+      await call(`/aulas/destinos?claseId=${enCurso.id}`),
+      await call(`/clases/${enCurso.id}/mover-aula`, json({ aulaId: fixture.otraAulaId })),
+      await call(
+        `/aulas/${fixture.aulaId}/reemplazar-clase`,
+        json({ claseId: enCurso.id, aulaDestinoId: fixture.otraAulaId }),
+      ),
+    ];
+    for (const perfil of ["ESTUDIANTE", "DOCENTE"] as const) {
+      getAuthContext.mockResolvedValue(
+        authOf(institution, await createUserWithPerfil(institution, perfil)),
+      );
+      for (const respuesta of await rutas()) expect(respuesta.status).toBe(403);
+    }
+
+    const autoridad = await createUserWithPerfil(institution, "AUTORIDAD");
+    getAuthContext.mockResolvedValue(authOf(institution, autoridad));
+    expect((await call(`/aulas/${fixture.aulaId}/clases-asignables`)).status).toBe(200);
+    const destinos = await call(`/aulas/destinos?claseId=${enCurso.id}`);
+    expect(destinos.status).toBe(200);
+    const movida = await call(
+      `/clases/${enCurso.id}/mover-aula`,
+      json({ aulaId: fixture.otraAulaId }),
+    );
+    expect(movida.status).toBe(200);
+    expect(((await movida.json()) as { aula: { codigo: string } }).aula.codigo).toBe("Aula 7");
+
+    const sinAula = await prisma.claseProgramada.create({
+      data: {
+        organizationId: institution.organizationId,
+        comisionId: fixture.comisionId,
+        fecha: toDateColumn(hoy),
+        inicio: new Date(Date.now() - 30_000),
+        fin: new Date(Date.now() + 3_600_000),
+      },
+    });
+    const asignada = await call(`/clases/${sinAula.id}/aula`, json({ aulaId: fixture.aulaId }));
+    expect(asignada.status).toBe(200);
+
+    const otraSinAula = await prisma.claseProgramada.create({
+      data: {
+        organizationId: institution.organizationId,
+        comisionId: fixture.comisionId,
+        fecha: toDateColumn(hoy),
+        inicio: new Date(Date.now() - 20_000),
+        fin: new Date(Date.now() + 3_600_000),
+      },
+    });
+    const destino = await prisma.aula.create({
+      data: {
+        organizationId: institution.organizationId,
+        codigo: "Aula 99",
+        edificio: "Edificio A",
+        piso: "PB",
+        capacidad: 40,
+        equipamiento: [],
+      },
+    });
+    const reemplazo = await call(
+      `/aulas/${fixture.aulaId}/reemplazar-clase`,
+      json({ claseId: otraSinAula.id, aulaDestinoId: destino.id }),
+    );
+    expect(reemplazo.status).toBe(200);
+  });
+});
+
+describe("Incidencias por HTTP", () => {
+  const reporte = (aulaId: string, datos: object = {}) => ({
+    aulaId,
+    elemento: "PROYECTOR",
+    descripcion: "  No enciende  ",
+    gravedad: "IMPIDE_USO",
+    ...datos,
+  });
+
+  it("Estudiante y Autoridad no ven ni reportan; el Docente reporta pero no gestiona", async () => {
+    const institution = await createInstitution();
+    const fixture = await seedAcademicFixture(institution);
+    const clase = await createClase(institution, fixture, "2099-10-14");
+    for (const perfil of ["ESTUDIANTE", "AUTORIDAD"] as const) {
+      getAuthContext.mockResolvedValue(
+        authOf(institution, await createUserWithPerfil(institution, perfil)),
+      );
+      expect((await call("/incidencias")).status).toBe(403);
+      expect((await call("/incidencias", json(reporte(fixture.aulaId)))).status).toBe(403);
+      expect(
+        (await call("/incidencias/fotos", json({ contentType: "image/png", size: 10 }))).status,
+      ).toBe(403);
+    }
+
+    getAuthContext.mockResolvedValue(authOf(institution, fixture.docente));
+    const creada = await call("/incidencias", json(reporte(fixture.aulaId, { claseId: clase.id })));
+    expect(creada.status).toBe(201);
+    const { id } = (await creada.json()) as { id: string };
+    expect((await call("/incidencias")).status).toBe(403);
+    expect((await call(`/incidencias/${id}`)).status).toBe(403);
+    expect((await call(`/incidencias/${id}/estado`, json({ estado: "EN_CURSO" }))).status).toBe(
+      403,
+    );
+  });
+
+  it("valida con el detalle por campo y el Bedel gestiona la incidencia", async () => {
+    const institution = await createInstitution();
+    const fixture = await seedAcademicFixture(institution);
+    getAuthContext.mockResolvedValue(authOf(institution, institution));
+
+    const invalida = await call(
+      "/incidencias",
+      json({ aulaId: fixture.aulaId, descripcion: "x".repeat(501) }),
+    );
+    expect(invalida.status).toBe(422);
+    const detalleError = JSON.stringify(await invalida.json());
+    expect(detalleError).toContain("Elegí el elemento afectado");
+    expect(detalleError).toContain("La descripción admite hasta 500 caracteres");
+    const sinDescripcion = await call(
+      "/incidencias",
+      json({ aulaId: fixture.aulaId, elemento: "OTRO" }),
+    );
+    expect(JSON.stringify(await sinDescripcion.json())).toContain("Ingresá una descripción");
+
+    const creada = await call("/incidencias", json(reporte(fixture.aulaId)));
+    expect(creada.status).toBe(201);
+    const incidencia = (await creada.json()) as { id: string; descripcion: string; estado: string };
+    expect(incidencia).toMatchObject({ descripcion: "No enciende", estado: "ABIERTA" });
+
+    const lista = await call("/incidencias");
+    expect(((await lista.json()) as unknown[]).length).toBe(1);
+    expect(((await (await call("/incidencias?estados=RESUELTA")).json()) as unknown[]).length).toBe(
+      0,
+    );
+
+    const enCurso = await call(
+      `/incidencias/${incidencia.id}/estado`,
+      json({ estado: "EN_CURSO", observaciones: "En camino" }),
+    );
+    expect(enCurso.status).toBe(200);
+    const retroceso = await call(
+      `/incidencias/${incidencia.id}/estado`,
+      json({ estado: "ABIERTA" }),
+    );
+    expect(retroceso.status).toBe(409);
+    const detalle = await call(`/incidencias/${incidencia.id}`);
+    expect(((await detalle.json()) as { historial: unknown[] }).historial).toHaveLength(2);
+  });
+
+  it("falla con un 503 claro cuando falta el almacenamiento de archivos", async () => {
+    const institution = await createInstitution();
+    getAuthContext.mockResolvedValue(authOf(institution, institution));
+    const respuesta = await call(
+      "/incidencias/fotos",
+      json({ contentType: "image/jpeg", size: 1000 }),
+    );
+    expect(respuesta.status).toBe(503);
+    expect(JSON.stringify(await respuesta.json())).toContain("STORAGE_BUCKET");
+
+    const pdf = await call(
+      "/incidencias/fotos",
+      json({ contentType: "application/pdf", size: 1000 }),
+    );
+    expect(pdf.status).toBe(422);
+    expect(JSON.stringify(await pdf.json())).toContain("La foto debe ser JPG o PNG");
+  });
+});
+
+describe("datos académicos: administración", () => {
+  it("Bedel y Autoridad administran; el resto recibe 403; 422 y 409 con el texto exacto", async () => {
+    const institution = await createInstitution();
+    const docente = await createUserWithPerfil(institution, "DOCENTE");
+    const autoridad = await createUserWithPerfil(institution, "AUTORIDAD");
+
+    getAuthContext.mockResolvedValue(authOf(institution, docente));
+    for (const ruta of [
+      "/carreras/gestion",
+      "/periodos-lectivos",
+      "/horarios",
+      "/horarios/aulas",
+      "/docentes",
+    ]) {
+      expect((await call(ruta)).status).toBe(403);
+    }
+    expect((await call("/carreras", json({ codigo: "K", nombre: "Sistemas" }))).status).toBe(403);
+
+    getAuthContext.mockResolvedValue(authOf(institution, autoridad));
+    const creada = await call("/carreras", json({ codigo: "K", nombre: "Sistemas" }));
+    expect(creada.status).toBe(201);
+    const repetida = await call("/carreras", json({ codigo: "K", nombre: "Otra" }));
+    expect(repetida.status).toBe(409);
+    expect(((await repetida.json()) as { error: { message: string } }).error.message).toBe(
+      "Ya existe una carrera con ese código",
+    );
+
+    const invertido = await call(
+      "/periodos-lectivos",
+      json({ nombre: "P", fechaInicio: "2030-03-10", fechaFin: "2030-03-10" }),
+    );
+    expect(invertido.status).toBe(422);
+    expect(await invertido.json()).toMatchObject({
+      error: {
+        issues: [
+          { path: "fechaFin", message: "La fecha de fin debe ser posterior a la de inicio" },
+        ],
+      },
+    });
+
+    const { id } = (await creada.json()) as { id: string };
+    expect((await call(`/carreras/${id}/baja`, { method: "POST" })).status).toBe(200);
+    const bajas = await call("/carreras/gestion?bajas=true");
+    expect(await bajas.json()).toEqual([expect.objectContaining({ id, activa: false })]);
+  });
+});
+
+describe("política de privacidad por HTTP", () => {
+  it("informa la aceptación pendiente en /me, acepta la vigente y rechaza una versión vieja", async () => {
+    const pendiente = async () =>
+      ((await (await call("/me")).json()) as { politicaPendiente: boolean }).politicaPendiente;
+    expect(await pendiente()).toBe(true);
+
+    const vigente = await call("/politica-de-privacidad");
+    expect(await vigente.json()).toMatchObject({ version: 1, aceptadaEn: null });
+
+    const vieja = await call("/politica-de-privacidad/aceptaciones", json({ version: 2 }));
+    expect(vieja.status).toBe(409);
+    expect(await pendiente()).toBe(true);
+
+    const aceptada = await call("/politica-de-privacidad/aceptaciones", json({ version: 1 }));
+    expect(aceptada.status).toBe(200);
+    expect(await aceptada.json()).toMatchObject({ version: 1, aceptadaEn: expect.any(String) });
+    expect(await pendiente()).toBe(false);
   });
 });

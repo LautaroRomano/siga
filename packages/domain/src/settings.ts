@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+import { presenciaSchema } from "./presencia";
+import { turnosSchema } from "./turnos";
+
 export const organizationNameSchema = z
   .string()
   .trim()
@@ -10,5 +13,7 @@ export const organizationNameSchema = z
 // sus propias preferencias.
 export const updateSettingsSchema = z.object({
   name: organizationNameSchema.optional(),
+  turnos: turnosSchema.optional(),
+  presencia: presenciaSchema.optional(),
 });
 export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;

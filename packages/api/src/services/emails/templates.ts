@@ -1,3 +1,5 @@
+import { tipoNovedadLabels, type PrioridadAviso, type TipoNovedad } from "@repo/domain";
+
 import { apiEnv } from "../../env";
 
 // Plantillas puras: reciben el contexto ya resuelto y devuelven asunto y HTML. Sin librería de
@@ -27,6 +29,7 @@ export const emailLayout = (
   paragraphs: string[],
   rows: SummaryRow[],
   cta: { label: string; url: string },
+  footer = "",
 ) => `<!doctype html>
 <html lang="es">
 <body style="margin:0;background:#f3f4f6;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827">
@@ -39,6 +42,7 @@ ${paragraphs.map((text) => `<p style="margin:0 0 12px;font-size:15px;line-height
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0;font-size:14px">${summaryTable(rows)}</table>
 <p style="margin:24px 0 0"><a href="${escapeHtml(cta.url)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">${escapeHtml(cta.label)}</a></p>
 <p style="margin:16px 0 0;font-size:12px;color:#6b7280">Si el botón no funciona, copiá este link: ${escapeHtml(cta.url)}</p>
+${footer}
 </td></tr>
 </table>
 </td></tr>
@@ -46,12 +50,7 @@ ${paragraphs.map((text) => `<p style="margin:0 0 12px;font-size:15px;line-height
 </body>
 </html>`;
 
-export type InvitationEmailContext = {
-  organizationName: string;
-  inviterName: string;
-  url: string;
-  expiresAt: Date;
-};
+export type CuentaEmailContext = { nombre: string; url: string };
 
 const dateFormatter = new Intl.DateTimeFormat("es-AR", {
   timeZone: apiEnv.timeZone,
@@ -61,19 +60,223 @@ const dateFormatter = new Intl.DateTimeFormat("es-AR", {
 
 export const formatEmailDate = (date: Date) => dateFormatter.format(date);
 
-export const invitationEmail = (context: InvitationEmailContext): EmailContent => ({
-  subject: `${context.inviterName} te invitó a ${context.organizationName}`,
+const linkLifetimeNote = "El enlace vale 24 horas. Si no lo pediste, ignorá este correo.";
+
+export const activationEmail = (context: CuentaEmailContext): EmailContent => ({
+  subject: "Activá tu cuenta de SiGA",
   html: emailLayout(
-    `Invitación a ${context.organizationName}`,
+    "Activá tu cuenta",
     [
-      "Hola,",
-      `${escapeHtml(context.inviterName)} te invitó a unirte a la organización ${escapeHtml(context.organizationName)}. Iniciá sesión o registrate con este mismo email y aceptá la invitación.`,
-      `El link vence el ${escapeHtml(formatEmailDate(context.expiresAt))}.`,
+      `Hola ${escapeHtml(context.nombre)},`,
+      "La institución te creó una cuenta en SiGA. Definí tu contraseña para ingresar.",
+      linkLifetimeNote,
     ],
-    [
-      ["Organización", context.organizationName],
-      ["Te invita", context.inviterName],
-    ],
-    { label: "Ver la invitación", url: context.url },
+    [],
+    { label: "Definir mi contraseña", url: context.url },
   ),
 });
+
+const recoveryLinkLifetimeNote =
+  "El enlace vale 60 minutos y sirve una sola vez. Si no lo pediste, ignorá este correo.";
+
+export const passwordResetEmail = (context: CuentaEmailContext): EmailContent => ({
+  subject: "Recuperá tu contraseña de SiGA",
+  html: emailLayout(
+    "Recuperá tu contraseña",
+    [
+      `Hola ${escapeHtml(context.nombre)},`,
+      "Pediste recuperar tu contraseña. Usá el enlace para elegir una nueva.",
+      recoveryLinkLifetimeNote,
+    ],
+    [],
+    { label: "Definir mi contraseña", url: context.url },
+  ),
+});
+
+export const verificationEmail = (context: CuentaEmailContext): EmailContent => ({
+  subject: "Verificá tu correo en SiGA",
+  html: emailLayout(
+    "Verificá tu correo",
+    [
+      `Hola ${escapeHtml(context.nombre)},`,
+      "Confirmá que este correo es tuyo para terminar de crear tu cuenta en SiGA.",
+      linkLifetimeNote,
+    ],
+    [],
+    { label: "Verificar mi correo", url: context.url },
+  ),
+});
+
+export type NovedadEmailContext = {
+  materia: string;
+  comision: string;
+  tipo: TipoNovedad;
+  clases: { fecha: string; horaInicio: string; horaFin: string }[];
+  minutosDemora: number | null;
+  enlaceVirtual: string | null;
+  aulaNueva: string | null;
+  mensaje: string | null;
+  publicadaPorBedelia: boolean;
+  clasesUrl: string;
+  bajaUrl: string;
+};
+
+const isoToArgentine = (fecha: string) => fecha.split("-").reverse().join("/");
+
+const fechaLine = (clases: NovedadEmailContext["clases"]) => {
+  const primera = clases[0]!;
+  const ultima = clases[clases.length - 1]!;
+  if (clases.length === 1) {
+    return `Fecha: ${isoToArgentine(primera.fecha)}, ${primera.horaInicio} a ${primera.horaFin}`;
+  }
+  return `Fechas: del ${isoToArgentine(primera.fecha)} al ${isoToArgentine(ultima.fecha)}`;
+};
+
+const datoLine = (context: NovedadEmailContext) => {
+  if (context.tipo === "DEMORA" && context.minutosDemora !== null) {
+    return `Demora: ${context.minutosDemora} ${context.minutosDemora === 1 ? "minuto" : "minutos"}`;
+  }
+  if (context.tipo === "VIRTUAL" && context.enlaceVirtual) {
+    return `Enlace de la clase: ${context.enlaceVirtual}`;
+  }
+  if (context.tipo === "CAMBIO_AULA" && context.aulaNueva) {
+    return `Aula nueva: ${context.aulaNueva}`;
+  }
+  return null;
+};
+
+// ETI-2: solo tipo, fechas, dato del tipo y mensaje publicado; nunca motivo personal ni autor.
+export const novedadEmail = (context: NovedadEmailContext): EmailContent => {
+  const subject = `Novedad en ${context.materia} ${context.comision}: ${tipoNovedadLabels[context.tipo]}`;
+  const lines = [
+    `Tipo: ${tipoNovedadLabels[context.tipo]}`,
+    fechaLine(context.clases),
+    datoLine(context),
+    context.mensaje ? `Mensaje: ${context.mensaje}` : null,
+    `Publicada por: ${context.publicadaPorBedelia ? "Bedelía" : "Docente"}`,
+  ].filter((line): line is string => line !== null);
+  const footer = `<p style="margin:16px 0 0;font-size:12px"><a href="${escapeHtml(context.bajaUrl)}" style="color:#6b7280">Dejar de recibir novedades por correo</a></p>`;
+  return {
+    subject,
+    html: emailLayout(
+      subject,
+      lines.map(escapeHtml),
+      [],
+      { label: "Ver mis clases", url: context.clasesUrl },
+      footer,
+    ),
+  };
+};
+
+export type AvisoEmailContext = {
+  titulo: string;
+  cuerpo: string;
+  prioridad: PrioridadAviso;
+  desde: Date;
+  hasta: Date;
+  avisosUrl: string;
+  bajaUrl: string | null;
+};
+
+const dateTimeFormatter = new Intl.DateTimeFormat("es-AR", {
+  timeZone: apiEnv.timeZone,
+  day: "numeric",
+  month: "long",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+const parrafosDe = (texto: string) =>
+  texto
+    .split(/\r?\n+/)
+    .filter((linea) => linea.trim() !== "")
+    .map(escapeHtml);
+
+// El estudiante que no activó la opción no recibe el correo; quien sí, puede darse de baja sin
+// iniciar sesión. Los demás perfiles no tienen esa opción, así que no llevan el enlace.
+export const avisoEmail = (context: AvisoEmailContext): EmailContent => {
+  const subject = `${context.prioridad === "URGENTE" ? "Aviso urgente" : "Aviso institucional"}: ${context.titulo}`;
+  const footer = context.bajaUrl
+    ? `<p style="margin:16px 0 0;font-size:12px"><a href="${escapeHtml(context.bajaUrl)}" style="color:#6b7280">Dejar de recibir avisos institucionales por correo</a></p>`
+    : "";
+  return {
+    subject,
+    html: emailLayout(
+      context.titulo,
+      parrafosDe(context.cuerpo),
+      [
+        ["Vigente desde", dateTimeFormatter.format(context.desde)],
+        ["Vigente hasta", dateTimeFormatter.format(context.hasta)],
+      ],
+      { label: "Ver los avisos", url: context.avisosUrl },
+      footer,
+    ),
+  };
+};
+
+export type ResolucionAula = "APROBADA" | "RECHAZADA" | "REASIGNADA" | "ASIGNADA";
+
+export type SolicitudAulaEmailContext = {
+  resolucion: ResolucionAula;
+  materia: string;
+  comision: string;
+  fecha: string;
+  horaInicio: string;
+  horaFin: string;
+  aula: string;
+  aulaAnterior: string | null;
+  motivo: string | null;
+  url: string;
+};
+
+const asuntosAula: Record<ResolucionAula, string> = {
+  APROBADA: "Solicitud de aula aprobada",
+  RECHAZADA: "Solicitud de aula rechazada",
+  REASIGNADA: "Cambio de aula",
+  ASIGNADA: "Aula asignada",
+};
+
+const introsAula: Record<ResolucionAula, string> = {
+  APROBADA: "Bedelía aprobó la solicitud de aula para tu clase.",
+  RECHAZADA: "Bedelía rechazó la solicitud de aula para tu clase y la clase conserva su aula.",
+  REASIGNADA: "Bedelía cambió el aula de tu clase.",
+  ASIGNADA: "Bedelía asignó un aula a tu clase.",
+};
+
+const filasAula = (context: SolicitudAulaEmailContext): SummaryRow[] => {
+  switch (context.resolucion) {
+    case "RECHAZADA":
+      return [
+        ["Aula pedida", context.aula],
+        ["Motivo", context.motivo ?? ""],
+      ];
+    case "REASIGNADA":
+      return [
+        ["Aula anterior", context.aulaAnterior ?? ""],
+        ["Aula nueva", context.aula],
+      ];
+    default:
+      return [["Aula", context.aula]];
+  }
+};
+
+// Les llega a los docentes de la comisión cuando bedelía resuelve un pedido de aula o asigna
+// una a una clase sin aula.
+export const solicitudAulaEmail = (context: SolicitudAulaEmailContext): EmailContent => {
+  const subject = `${asuntosAula[context.resolucion]}: ${context.materia} ${context.comision}`;
+  return {
+    subject,
+    html: emailLayout(
+      asuntosAula[context.resolucion],
+      [introsAula[context.resolucion]],
+      [
+        ["Materia", context.materia],
+        ["Comisión", context.comision],
+        ["Fecha", isoToArgentine(context.fecha)],
+        ["Franja", `${context.horaInicio} a ${context.horaFin}`],
+        ...filasAula(context),
+      ],
+      { label: "Ver mis clases", url: context.url },
+    ),
+  };
+};

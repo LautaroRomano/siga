@@ -14,6 +14,7 @@ type OpenApiDocument = {
   paths: Record<
     string,
     {
+      get?: { parameters: { name: string; in: string }[] };
       post?: { requestBody: { content: { "application/json": { schema: BodySchema } } } };
       patch?: { requestBody: { content: { "application/json": { schema: BodySchema } } } };
     }
@@ -26,16 +27,39 @@ const openapi = JSON.parse(
 ) as OpenApiDocument;
 
 describe("openapi.json", () => {
-  it("declara el rol como enum y lostOrganization nullable en Me", () => {
+  it("declara el rol y el perfil como enum y lostOrganization nullable en Me", () => {
     const me = openapi.components.schemas.Me;
     expect(me?.properties.role?.enum).toEqual(["owner", "member"]);
+    expect(me?.properties.perfil?.enum).toEqual(["ESTUDIANTE", "DOCENTE", "BEDEL", "AUTORIDAD"]);
     expect(me?.required).toContain("lostOrganization");
   });
 
-  it("exige el email al invitar", () => {
+  it("documenta los filtros de clases como query params y el tipo de novedad como enum", () => {
+    const clases = openapi.paths["/api/v1/clases"]?.get;
+    expect(clases?.parameters.map((parameter) => [parameter.name, parameter.in])).toEqual([
+      ["fecha", "query"],
+      ["ambito", "query"],
+      ["carreraId", "query"],
+      ["anio", "query"],
+      ["materiaId", "query"],
+      ["comisionId", "query"],
+    ]);
+    const novedad =
+      openapi.paths["/api/v1/novedades"]?.post?.requestBody.content["application/json"].schema;
+    expect(novedad?.required).toEqual(["claseIds", "tipo"]);
+    expect(novedad?.properties.tipo?.enum).toEqual([
+      "AUSENCIA",
+      "DEMORA",
+      "VIRTUAL",
+      "SUSPENSION",
+      "CAMBIO_AULA",
+    ]);
+  });
+
+  it("exige nombre, DNI, correo y perfil al dar de alta un usuario", () => {
     const schema =
-      openapi.paths["/api/v1/invitations"]?.post?.requestBody.content["application/json"].schema;
-    expect(schema?.required).toEqual(["email"]);
+      openapi.paths["/api/v1/usuarios"]?.post?.requestBody.content["application/json"].schema;
+    expect(schema?.required).toEqual(["nombre", "dni", "correo", "perfil"]);
   });
 
   it("deja el nombre opcional en los ajustes", () => {

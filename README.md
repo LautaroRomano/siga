@@ -1,12 +1,12 @@
 # product-template
 
-Template para arrancar un producto nuevo con la misma base que ya funciona en producción: PWA en español (es-AR) con autenticación, organizaciones multi-tenant con miembros e invitaciones, API REST con OpenAPI consumible desde la web y desde un cliente móvil, y el flujo de tickets del plugin `ticket-flow` listo para usar. No trae ningún dominio: el producto se construye encima.
+Template para arrancar un producto nuevo con la misma base que ya funciona en producción: PWA en español (es-AR) con autenticación, organizaciones multi-tenant con miembros, API REST con OpenAPI consumible desde la web y desde un cliente móvil, y el flujo de tickets del plugin `ticket-flow` listo para usar. No trae ningún dominio: el producto se construye encima.
 
 ## Qué incluye
 
-- **Autenticación** con Better Auth: email y contraseña, Google, bearer token para móviles. Pantallas de login, registro e invitación.
+- **Autenticación** con Better Auth: email y contraseña, Google, bearer token para móviles. Pantallas de login, registro (con verificación de correo) y activación de cuenta.
 - **Organizaciones**: cada cuenta nace con una organización propia donde es Administrador; invita miembros por email, los quita, cambia de organización desde la barra lateral.
-- **Configuración** (nombre de la organización, miembros e invitaciones, versión y Novedades) y **Mi perfil** (nombre del usuario).
+- **Configuración** (nombre de la organización, turnos, miembros, versión y Novedades) y **Mi perfil** (nombre del usuario).
 - **Infraestructura**: cola de emails con Resend, rate limit en Postgres, auditoría y medición por request, cliente de storage S3/R2 opcional, PWA instalable con página offline.
 - **Calidad**: unit tests, integración contra Postgres real, e2e con Playwright, lint, typecheck, contratos (`openapi.json` y migraciones) y CI en GitHub Actions.
 
@@ -44,7 +44,7 @@ Requisitos: Node 22+ (ver `.nvmrc`), pnpm 11, y Docker o un Postgres local en `l
 pnpm dev:local
 ```
 
-Ese comando crea `.env` con valores locales si no existe, instala dependencias, levanta Postgres con Docker si no hay uno corriendo, aplica migraciones, carga el usuario demo y abre la app en http://localhost:3000. Ingresá con `demo@example.com` / `demo1234`. Login con Google, emails y storage requieren completar `GOOGLE_*`, `RESEND_*` y `STORAGE_*` en `.env` (ver `.env.example`).
+Ese comando crea `.env` con valores locales si no existe, instala dependencias, levanta Postgres con Docker si no hay uno corriendo, aplica migraciones, carga el seed de SiGA y abre la app en http://localhost:3000. Usuarios del seed (clave `demo1234`): `demo@example.com` (Bedel), `docente@example.com` (Docente), `estudiante@example.com` (Estudiante que sigue 5K2) y `autoridad@example.com` (Autoridad). El seed es obligatorio: carga la institución a la que entran las cuentas nuevas. Login con Google, emails y storage requieren completar `GOOGLE_*`, `RESEND_*` y `STORAGE_*` en `.env` (ver `.env.example`).
 
 Paso a paso, si preferís hacerlo a mano:
 
@@ -53,13 +53,13 @@ pnpm install
 cp .env.example .env            # completá DATABASE_URL, DIRECT_URL y BETTER_AUTH_SECRET
 docker compose up -d            # Postgres local en localhost:5432 (usuario/clave/db: app)
 pnpm db:migrate                 # aplica migraciones (prisma migrate dev)
-pnpm db:seed                    # demo@example.com / demo1234, Administrador de "Organización demo"
+pnpm db:seed                    # institución, usuarios por perfil, datos académicos y clases
 pnpm dev                        # http://localhost:3000
 ```
 
 Sin Docker: `brew services start postgresql@16` y creá el rol y la base `app` (ver `docs/ambientes-y-deploy.md`).
 
-Rutas útiles: `/`, `/configuracion`, `/mi-perfil`, `/api/v1/docs` (Swagger UI) y `/api/v1/openapi.json`.
+Rutas útiles: `/` (Mis clases de hoy), `/clases` (búsqueda), `/novedades`, `/estado-institucional`, `/preferencias`, `/configuracion`, `/mi-perfil`, `/api/v1/docs` (Swagger UI) y `/api/v1/openapi.json`.
 
 ## Suite de calidad
 

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, test } from "./support/fixtures";
+import { expect, loginViaUi, seededUsers, test } from "./support/fixtures";
 
 const fontFamilyOf = (page: Page, selector: string) =>
   page
@@ -24,12 +24,13 @@ test.describe("Tipografía", () => {
     expect(await fontFamilyOf(page, '[data-slot="card-title"]')).toBe(registerBodyFont);
   });
 
-  test("inicio, configuración y mi perfil heredan la tipografía en sidebar, tarjetas, pop-up y menú", async ({
-    authenticatedPage: page,
+  test("estado institucional, configuración y mi perfil heredan la tipografía en sidebar, tarjetas, pop-up y menú", async ({
+    page,
   }) => {
+    await loginViaUi(page, seededUsers.bedel);
     const referenceFont = await bodyFontFamily(page);
     expect(referenceFont).toContain("Google Sans");
-    expect(await fontFamilyOf(page, 'h1:has-text("Inicio")')).toBe(referenceFont);
+    expect(await fontFamilyOf(page, 'h1:has-text("Estado institucional")')).toBe(referenceFont);
     expect(await fontFamilyOf(page, '[data-slot="sidebar-content"]')).toBe(referenceFont);
 
     await page.getByTestId("user-menu-trigger").click();
@@ -42,7 +43,8 @@ test.describe("Tipografía", () => {
     expect(await fontFamilyOf(page, 'h1:has-text("Configuración")')).toBe(referenceFont);
     expect(await fontFamilyOf(page, '[data-slot="card"]')).toBe(referenceFont);
 
-    await page.getByRole("button", { name: "Invitar" }).click();
+    await page.goto("/usuarios");
+    await page.getByRole("button", { name: "Nuevo usuario" }).click();
     const dialog = page.locator('[data-slot="dialog-content"]');
     await expect(dialog).toBeVisible();
     expect(await fontFamilyOf(page, '[data-slot="dialog-content"]')).toBe(referenceFont);
@@ -97,7 +99,7 @@ test.describe("Tipografía", () => {
 
     await context.setOffline(true);
     await page.reload();
-    const heading = page.getByRole("heading", { name: "Inicio", level: 1 });
+    const heading = page.getByRole("heading", { name: "Mis clases de hoy", level: 1 });
     await expect(heading).toBeVisible();
     expect(await heading.evaluate((el) => getComputedStyle(el).fontFamily)).not.toBe("");
     await context.setOffline(false);

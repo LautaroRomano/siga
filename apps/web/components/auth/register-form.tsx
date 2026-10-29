@@ -1,6 +1,7 @@
 "use client";
 
 import { authClient, signInWithGoogle } from "@repo/auth/client";
+import { mensajeContrasena } from "@repo/domain";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -19,7 +20,7 @@ import {
 import { Input } from "@repo/ui/components/input";
 import { Spinner } from "@repo/ui/components/spinner";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -29,28 +30,29 @@ import { authRouteWithNext, nextRouteOf } from "./auth-routes";
 import { GoogleIcon } from "./google-icon";
 
 export function RegisterForm() {
-  const router = useRouter();
   const next = nextRouteOf(useSearchParams());
   const [pending, setPending] = useState(false);
   const [redirectingToGoogle, setRedirectingToGoogle] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState<string>();
   const busy = pending || redirectingToGoogle;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setPending(true);
+    const email = formValue(form, "email");
     const { error } = await authClient.signUp.email({
       name: formValue(form, "name"),
-      email: formValue(form, "email"),
+      email,
       password: formValue(form, "password"),
+      callbackURL: next,
     });
+    setPending(false);
     if (error) {
-      setPending(false);
       toast.error(error.message ?? "No se pudo crear la cuenta");
       return;
     }
-    router.push(next);
-    router.refresh();
+    setRegisteredEmail(email);
   };
 
   const continueWithGoogle = () => {
@@ -58,11 +60,30 @@ export function RegisterForm() {
     void signInWithGoogle(next);
   };
 
+  if (registeredEmail) {
+    return (
+      <Card>
+        <CardHeader className="text-center">
+          <CardTitle className="text-xl">Revisá tu correo</CardTitle>
+          <CardDescription>
+            Te enviamos un enlace a {registeredEmail}. Verificalo en las próximas 24 horas para
+            poder ingresar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-center">
+          <Link href={authRouteWithNext("/login", next)} className="text-sm underline">
+            Ir a Ingresar
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader className="text-center">
         <CardTitle className="text-xl">Crear cuenta</CardTitle>
-        <CardDescription>Creá tu cuenta y tu organización</CardDescription>
+        <CardDescription>Registrate como estudiante de la UTN FRT</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit}>
@@ -94,7 +115,7 @@ export function RegisterForm() {
                 minLength={8}
                 required
               />
-              <FieldDescription>Mínimo 8 caracteres.</FieldDescription>
+              <FieldDescription>{mensajeContrasena}.</FieldDescription>
             </Field>
             <Field>
               <Button type="submit" disabled={busy}>

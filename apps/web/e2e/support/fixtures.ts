@@ -1,9 +1,12 @@
 import { expect, test as base, type APIRequestContext, type Page } from "@playwright/test";
 
+import { aceptarPolitica, enlaceDelUltimoCorreo, verificarCorreo } from "./db";
+
 export type User = { name: string; email: string; password: string };
 
 const uniqueSuffix = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
+// Una cuenta nueva: se registra como estudiante de la institución (sin comisiones seguidas).
 export const newUser = (): User => {
   const suffix = uniqueSuffix();
   return {
@@ -13,6 +16,14 @@ export const newUser = (): User => {
   };
 };
 
+// Usuarios del seed (`packages/db/prisma/seed.ts`), uno por perfil.
+export const seededUsers = {
+  bedel: { name: "Rosa Benítez", email: "demo@example.com", password: "demo1234" },
+  docente: { name: "Marcos Álvarez", email: "docente@example.com", password: "demo1234" },
+  estudiante: { name: "Lucía Gómez", email: "estudiante@example.com", password: "demo1234" },
+  autoridad: { name: "Carla Medina", email: "autoridad@example.com", password: "demo1234" },
+} satisfies Record<string, User>;
+
 export const apiRetries = 3;
 
 export const signUpViaApi = async (request: APIRequestContext, user: User) => {
@@ -21,22 +32,39 @@ export const signUpViaApi = async (request: APIRequestContext, user: User) => {
     maxRetries: apiRetries,
   });
   expect(response.ok()).toBeTruthy();
+  verificarCorreo(user.email);
+  aceptarPolitica(user.email);
 };
 
-export type PendingInvitation = { id: string; email: string };
+// El registro por la pantalla termina en "Revisá tu correo"; el enlace del correo verifica la
+// cuenta y la deja adentro.
+export const registerViaUi = async (page: Page, user: User) => {
+  await page.goto("/registro");
+  await page.getByLabel("Nombre y apellido").fill(user.name);
+  await page.getByLabel("Email").fill(user.email);
+  await page.getByLabel("Contraseña").fill(user.password);
+  await page.getByRole("button", { name: "Crear cuenta" }).click();
+  await expect(page.getByText("Revisá tu correo")).toBeVisible();
+};
 
-export const inviteViaApi = async (request: APIRequestContext, email: string) => {
-  const response = await request.post("/api/v1/invitations", {
-    data: { email },
-    maxRetries: apiRetries,
-  });
-  expect(response.status()).toBe(201);
-  return (await response.json()) as PendingInvitation;
+export const aceptarPoliticaViaUi = async (page: Page) => {
+  await expect(page).toHaveURL(/\/politica-de-privacidad/);
+  await page.getByRole("button", { name: "Aceptar y continuar" }).click();
+  await expect(page).not.toHaveURL(/\/politica-de-privacidad/);
+};
+
+// Una cuenta nueva ve la política antes que cualquier pantalla: el enlace la verifica y la
+// acepta por la pantalla.
+export const verifyEmailViaLink = async (page: Page, user: User) => {
+  await page.goto(enlaceDelUltimoCorreo(user.email));
+  await aceptarPoliticaViaUi(page);
+  await expect(page).toHaveURL(/\/$/);
 };
 
 export type Me = {
   userId: string;
   organizationId: string;
+  perfil: string;
   organizations: { id: string; name: string; slug: string; role: string }[];
 };
 
@@ -53,35 +81,13 @@ export const loginViaUi = async (page: Page, user: User) => {
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Contraseña").fill(user.password);
   await page.getByRole("button", { name: "Ingresar" }).click();
-  await expect(page).toHaveURL(/\/$/, { timeout: firstCompileTimeout });
+  await expect(page).not.toHaveURL(/\/login/, { timeout: firstCompileTimeout });
 };
 
-// Registro desde el link de la invitación y aceptación: la cuenta nueva queda con su propia
-// organización y como miembro de la que invitó.
-export const registerFromInvitation = async (page: Page, invitationId: string, user: User) => {
-  await page.goto(`/invitacion/${invitationId}`);
-  await expect(page).toHaveURL(new RegExp(`/login\\?next=%2Finvitacion%2F${invitationId}`));
-  await page.getByRole("link", { name: "Registrate" }).click();
-  await expect(page).toHaveURL(new RegExp(`/registro\\?next=%2Finvitacion%2F${invitationId}`));
-  await page.getByLabel("Nombre y apellido").fill(user.name);
-  await page.getByLabel("Email").fill(user.email);
-  await page.getByLabel("Contraseña").fill(user.password);
-  await page.getByRole("button", { name: "Crear cuenta" }).click();
-  await expect(page).toHaveURL(new RegExp(`/invitacion/${invitationId}`), {
-    timeout: firstCompileTimeout,
-  });
-};
-
-export const acceptInvitationAsNewMember = async (page: Page, invitationId: string, user: User) => {
-  await registerFromInvitation(page, invitationId, user);
-  await page.getByRole("button", { name: "Aceptar" }).click();
-  await expect(page).toHaveURL(/\/$/);
-};
-
-export const switchOrganization = async (page: Page, name: string | RegExp) => {
-  await page.getByTestId("organization-switcher-trigger").click();
-  await page.getByRole("menuitemradio", { name }).click();
-  await expect(page).toHaveURL(/\/$/);
+export const logoutViaUi = async (page: Page) => {
+  await page.getByTestId("user-menu-trigger").click();
+  await page.getByRole("menuitem", { name: "Cerrar sesión" }).click();
+  await expect(page).toHaveURL(/\/login/);
 };
 
 export const expectNoHorizontalPageScroll = async (page: Page) => {

@@ -1,5 +1,15 @@
-export * from "./invitations";
+export * from "./avisos";
+export * from "./clases";
+export * from "./datos-academicos";
+export * from "./estado-institucional";
+export * from "./historico";
 export * from "./me";
+export * from "./novedades";
+export * from "./preferencias";
+export * from "./asistencias";
+export * from "./qr";
 export { findOwnedOrganizationId, listMembers, listOrganizationsOf } from "./memberships";
 export * from "./organizations";
 export * from "./settings";
+export * from "./usuarios";
+export * from "./politica-privacidad";

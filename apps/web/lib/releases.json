@@ -2,6 +2,25 @@
   "releases": [
     {
       "stage": "Alpha",
+      "number": "0.1",
+      "date": "2026-10-29",
+      "changes": [
+        "Ahora el docente registra su asistencia escaneando el QR que genera Bedelía, o Bedelía la registra a mano",
+        "Ahora docentes y Bedel pueden solicitar aula para una clase, y Bedelía las aprueba o rechaza en Solicitudes",
+        "Ahora el Bedel gestiona aulas e incidencias, y con la Autoridad ve el plano por piso y reubica clases",
+        "Ahora podés editar una novedad activa y el historial de la clase conserva la publicación original",
+        "Bedel y Autoridad publican avisos por perfil, carrera o comisión, y podés recibirlos por correo junto con las novedades",
+        "Consultas históricas permite revisar novedades, asistencia docente, uso de aulas e incidencias por rango de fechas y filtros",
+        "Bedel y Autoridad administran usuarios y datos académicos y generan las clases; vos corregís tus datos en Mi perfil",
+        "Ahora verificás tu correo al registrarte, aceptás la política de privacidad al entrar y podés recuperar tu contraseña",
+        "Tras 5 intentos fallidos la cuenta se bloquea 15 minutos, y la sesión vence tras 8 horas sin uso",
+        "La nueva sección Ayuda tiene una guía rápida y un manual de usuario según tu perfil",
+        "Se corrigieron el contraste, el uso con teclado y el tamaño de los botones en el celular",
+        "Se corrigió que algunas cuentas vieran una institución vacía al iniciar sesión"
+      ]
+    },
+    {
+      "stage": "Alpha",
       "number": "0.0",
       "date": "2026-10-13",
       "changes": []

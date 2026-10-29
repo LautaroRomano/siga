@@ -1,6 +1,6 @@
-# product-template
+# SiGA
 
-SiGA: <una línea que describa el producto>. Detalle en `README.md` y `docs/`.
+SiGA: sistema web de gestión operativa académica para la UTN FRT que centraliza en tiempo real el estado de la institución, las aulas, la asistencia docente, las novedades de clase y los avisos institucionales, para estudiantes, docentes, bedeles y autoridades. Producto en `docs/producto/`; detalle técnico en `README.md` y `docs/`.
 
 ## Reglas críticas
 
@@ -16,4 +16,4 @@ SiGA: <una línea que describa el producto>. Detalle en `README.md` y `docs/`.
 
 ## Tablero y skills
 
-Los tickets viven en GitHub Projects (`docs/flujo-de-tickets.md`). `/ticket-flow:refine`, `/ticket-flow:develop` y `/ticket-flow:prod-deploy` vacían Backlog, Ready/In progress e In review respectivamente. Skills, agentes y scripts (`board.sh`, `pr.sh`, `worktree.sh`, `release.sh`, `flow.sh`, en el `PATH`) vienen del plugin `ticket-flow` (`estebansanc/ticket-flow`), declarado en `.claude/settings.json`; este repo aporta solo `.claude/flow.json` con todo lo que identifica al producto (repo, Project, URLs, bases, comandos del stack, usuario de QA).
+Los tickets viven en GitHub Projects (`docs/flujo-de-tickets.md`). `/ticket-flow:refine`, `/ticket-flow:develop` y `/ticket-flow:prod-deploy` vacían Backlog, Ready/In progress e In review respectivamente. Skills, agentes y scripts (`board.sh`, `pr.sh`, `worktree.sh`, `release.sh`, `flow.sh`, en el `PATH`) vienen del plugin `ticket-flow` (`estebansanc/ticket-flow`), declarado en `.claude/settings.json`; este repo aporta solo `.claude/flow.json` con todo lo que identifica al producto (repo, Project, URLs, bases, comandos del stack, usuarios de QA por perfil).

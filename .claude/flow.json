@@ -11,17 +11,14 @@
   "environments": {
     "staging": {
       "workflow": "deploy-staging.yml",
-      "url": "https://siga-staging.vercel.app"
+      "url": "https://siga-orcin-staging.vercel.app"
     },
     "production": {
       "workflow": "deploy-production.yml",
-      "url": "https://siga.vercel.app"
+      "url": "https://siga-orcin.vercel.app"
     }
   },
-  "smokePaths": [
-    "/",
-    "/api/v1/openapi.json"
-  ],
+  "smokePaths": ["/", "/api/v1/openapi.json"],
   "worktrees": {
     "dir": "../siga-worktrees",
     "pgAdminUrl": "postgresql://crazyfarway@localhost:5432/postgres",
@@ -49,18 +46,35 @@
     "audience": "el usuario",
     "qaUser": "demo@example.com",
     "qaPassword": "demo1234",
-    "routes": [
-      "/"
+    "qaUsers": [
+      {
+        "perfil": "Bedel",
+        "email": "demo@example.com",
+        "password": "demo1234"
+      },
+      {
+        "perfil": "Docente",
+        "email": "docente@example.com",
+        "password": "demo1234"
+      },
+      {
+        "perfil": "Estudiante",
+        "email": "estudiante@example.com",
+        "password": "demo1234"
+      },
+      {
+        "perfil": "Autoridad",
+        "email": "autoridad@example.com",
+        "password": "demo1234"
+      }
     ],
+    "routes": ["/", "/clases", "/novedades", "/estado-institucional", "/preferencias"],
     "releaseNotesPlace": "Configuración → \"?\""
   },
   "services": {
     "neon": {
       "project": "raspy-bird-78934396",
-      "branches": [
-        "main",
-        "staging"
-      ]
+      "branches": ["main", "staging"]
     },
     "vercel": {
       "team": "esteban-sanchez",

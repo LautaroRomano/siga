@@ -29,9 +29,14 @@ const meOf = (lostOrganization: MeDto["lostOrganization"]): MeDto => ({
   userId: "u1",
   userName: "Usuario QA",
   userEmail: "qa@example.com",
+  dni: null,
+  legajo: null,
+  bajaSolicitadaEn: null,
   organizationId: ownOrganization.id,
   role: "owner",
+  perfil: "BEDEL",
   organizations: [ownOrganization],
+  politicaPendiente: false,
   lostOrganization,
 });
 

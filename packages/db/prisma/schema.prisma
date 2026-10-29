@@ -10,18 +10,39 @@ datasource db {
 // ---------- Better Auth (generado con `better-auth generate`) ----------
 
 model User {
-  id            String       @id
-  name          String
-  email         String
-  emailVerified Boolean      @default(false)
-  image         String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  sessions      Session[]
-  accounts      Account[]
-  members       Member[]
-  invitations   Invitation[]
-  auditLogs     AuditLog[]
+  id                   String               @id
+  name                 String
+  email                String
+  emailVerified        Boolean              @default(false)
+  image                String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  sessions             Session[]
+  accounts             Account[]
+  members              Member[]
+  invitations          Invitation[]
+  auditLogs            AuditLog[]
+  bloqueo              BloqueoCuenta?
+  aceptacionesPolitica AceptacionPolitica[]
+
+  profile                  UserProfile?
+  comisionesDictadas       ComisionDocente[]
+  comisionesSeguidas       ComisionSeguida[]
+  notificaciones           Notificacion[]
+  novedadesPublicadas      Novedad[]                  @relation("NovedadPublicadaPor")
+  novedadesEditadas        NovedadEdicion[]           @relation("NovedadEdicionEditadaPor")
+  novedadesFinalizadas     Novedad[]                  @relation("NovedadFinalizadaPor")
+  avisosPublicados         Aviso[]                    @relation("AvisoPublicadoPor")
+  estadosInstitucionales   EstadoInstitucional[]
+  solicitudesAula          SolicitudAula[]
+  sesionesQr               SesionQr[]
+  asistencias              AsistenciaDocente[]        @relation("AsistenciaDocente")
+  asistenciasRegistradas   AsistenciaDocente[]        @relation("AsistenciaRegistrada")
+  solicitudesAulaResueltas SolicitudAula[]            @relation("SolicitudAulaResueltaPor")
+  incidenciasReportadas    Incidencia[]
+  asignacionesDeAula       AsignacionAula[]
+  incidenciaEstados        IncidenciaEstado[]
+  intentosAsistencia       IntentoAsistenciaFallido[]
 
   @@unique([email])
   @@map("user")
@@ -90,9 +111,30 @@ model Organization {
   members     Member[]
   invitations Invitation[]
 
-  settings    OrganizationSettings?
-  auditLogs   AuditLog[]
-  emailOutbox EmailOutbox[]
+  settings       OrganizationSettings?
+  auditLogs      AuditLog[]
+  emailOutbox    EmailOutbox[]
+  notificaciones Notificacion[]
+
+  profiles               UserProfile[]
+  carreras               Carrera[]
+  materias               Materia[]
+  periodosLectivos       PeriodoLectivo[]
+  comisiones             Comision[]
+  horarios               Horario[]
+  diasNoLaborables       DiaNoLaborable[]
+  aulas                  Aula[]
+  clases                 ClaseProgramada[]
+  estadosInstitucionales EstadoInstitucional[]
+  novedades              Novedad[]
+  avisos                 Aviso[]
+  comisionesSeguidas     ComisionSeguida[]
+  solicitudesAula        SolicitudAula[]
+  sesionesQr             SesionQr[]
+  asistencias            AsistenciaDocente[]
+  intentosAsistencia     IntentoAsistenciaFallido[]
+  incidencias            Incidencia[]
+  asignacionesAula       AsignacionAula[]
 
   @@unique([slug])
   @@map("organization")
@@ -133,9 +175,17 @@ model Invitation {
 // Preferencias de la organización. El producto agrega acá sus propios campos; el nombre vive
 // en `Organization`.
 model OrganizationSettings {
-  organizationId String       @id
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  updatedAt      DateTime     @updatedAt
+  organizationId     String       @id
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Franjas de los turnos {MANANA|TARDE|NOCHE: {inicio, fin}} en "HH:mm" argentino; null usa
+  // los valores iniciales del dominio.
+  turnos             Json?
+  // Presencia del docente al registrar por QR {latitud, longitud, radioMetros, redes[]}
+  // (CFG-1); null usa la sede y el radio iniciales, con la red institucional vacía.
+  presencia          Json?
+  // Dominios de correo aceptados en el autorregistro (RF-10); vacía acepta cualquiera.
+  dominiosPermitidos String[]     @default([])
+  updatedAt          DateTime     @updatedAt
 
   @@map("organization_settings")
 }
@@ -149,19 +199,20 @@ enum EmailStatus {
 }
 
 model EmailOutbox {
-  id             String       @id @default(cuid())
+  notificacion   Notificacion?
+  id             String        @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   to             String
   subject        String
   html           String
-  status         EmailStatus  @default(PENDING)
-  attempts       Int          @default(0)
+  status         EmailStatus   @default(PENDING)
+  attempts       Int           @default(0)
   lastError      String?
-  sendAfter      DateTime     @default(now())
+  sendAfter      DateTime      @default(now())
   sentAt         DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([status, sendAfter])
   @@index([organizationId, createdAt])
@@ -177,6 +228,40 @@ model RateLimitBucket {
   @@id([key, windowStart])
   @@index([windowStart])
   @@map("rate_limit_bucket")
+}
+
+// Intentos consecutivos de ingreso con contraseña y fin del bloqueo vigente (SEG-9). Vive aparte
+// de User para que cada fallo no genere una entrada de auditoría por el cambio del contador.
+model BloqueoCuenta {
+  userId           String    @id
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  intentosFallidos Int       @default(0)
+  bloqueadoHasta   DateTime?
+
+  @@map("bloqueo_cuenta")
+}
+
+model PoliticaPrivacidad {
+  version     Int      @id
+  titulo      String
+  texto       String
+  publicadaEn DateTime @default(now())
+
+  aceptaciones AceptacionPolitica[]
+
+  @@map("politica_privacidad")
+}
+
+model AceptacionPolitica {
+  id         String             @id @default(cuid())
+  userId     String
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version    Int
+  politica   PoliticaPrivacidad @relation(fields: [version], references: [version], onDelete: Restrict)
+  aceptadaEn DateTime           @default(now())
+
+  @@unique([userId, version])
+  @@map("aceptacion_politica")
 }
 
 model AuditLog {
@@ -195,4 +280,625 @@ model AuditLog {
   @@index([organizationId, entity, entityId])
   @@index([organizationId, createdAt])
   @@map("audit_log")
+}
+
+// ---------- SiGA: usuarios y datos académicos base ----------
+
+enum Perfil {
+  ESTUDIANTE
+  DOCENTE
+  BEDEL
+  AUTORIDAD
+}
+
+enum Turno {
+  MANANA
+  TARDE
+  NOCHE
+}
+
+enum EstadoAula {
+  DISPONIBLE
+  FUERA_DE_SERVICIO
+  EN_MANTENIMIENTO
+}
+
+// Perfil de SiGA de cada cuenta (uno por usuario: hay una sola institución). `dni` y
+// `legajo` son opcionales porque el autorregistro todavía no los pide. La baja es lógica.
+model UserProfile {
+  userId                      String       @id
+  user                        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId              String
+  organization                Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  perfil                      Perfil
+  dni                         String?
+  legajo                      String?
+  activo                      Boolean      @default(true)
+  notificarNovedadesPorCorreo Boolean      @default(false)
+  notificarAvisosPorCorreo    Boolean      @default(false)
+  bajaSolicitadaAt            DateTime?
+  bajaMotivo                  String?
+  bajaResueltaAt              DateTime?
+  createdAt                   DateTime     @default(now())
+  updatedAt                   DateTime     @updatedAt
+
+  @@unique([organizationId, dni])
+  @@index([organizationId, perfil])
+  @@map("user_profile")
+}
+
+model Carrera {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  codigo         String
+  nombre         String
+  activa         Boolean      @default(true)
+  materias       Materia[]
+
+  @@unique([organizationId, codigo])
+  @@map("carrera")
+}
+
+model Materia {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  carreraId      String
+  carrera        Carrera      @relation(fields: [carreraId], references: [id], onDelete: Cascade)
+  codigo         String
+  nombre         String
+  anioCarrera    Int
+  activa         Boolean      @default(true)
+  comisiones     Comision[]
+
+  @@unique([organizationId, codigo])
+  @@index([carreraId, anioCarrera])
+  @@map("materia")
+}
+
+model PeriodoLectivo {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre         String
+  fechaInicio    DateTime     @db.Date
+  fechaFin       DateTime     @db.Date
+  activo         Boolean      @default(true)
+  comisiones     Comision[]
+
+  @@index([organizationId])
+  @@map("periodo_lectivo")
+}
+
+model Comision {
+  id               String            @id @default(cuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  materiaId        String
+  materia          Materia           @relation(fields: [materiaId], references: [id], onDelete: Cascade)
+  periodoLectivoId String
+  periodoLectivo   PeriodoLectivo    @relation(fields: [periodoLectivoId], references: [id], onDelete: Cascade)
+  codigo           String
+  turno            Turno
+  anioLectivo      Int
+  activa           Boolean           @default(true)
+  docentes         ComisionDocente[]
+  horarios         Horario[]
+  clases           ClaseProgramada[]
+  novedades        Novedad[]
+  seguidores       ComisionSeguida[]
+
+  // El mismo código (5K2) identifica al grupo en cada materia que cursa.
+  @@unique([materiaId, codigo])
+  @@index([organizationId])
+  @@map("comision")
+}
+
+model ComisionDocente {
+  comisionId String
+  comision   Comision @relation(fields: [comisionId], references: [id], onDelete: Cascade)
+  docenteId  String
+  docente    User     @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+
+  @@id([comisionId, docenteId])
+  @@index([docenteId])
+  @@map("comision_docente")
+}
+
+// Franja semanal de una comisión. `diaSemana` va de 1 (lunes) a 7 (domingo); las horas son
+// "HH:mm" en hora argentina.
+model Horario {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  comisionId     String
+  comision       Comision          @relation(fields: [comisionId], references: [id], onDelete: Cascade)
+  diaSemana      Int
+  horaInicio     String
+  horaFin        String
+  aulaHabitualId String?
+  aulaHabitual   Aula?             @relation(fields: [aulaHabitualId], references: [id], onDelete: SetNull)
+  activo         Boolean           @default(true)
+  clases         ClaseProgramada[]
+
+  @@index([comisionId])
+  @@map("horario")
+}
+
+model DiaNoLaborable {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fecha          DateTime     @db.Date
+  motivo         String
+  activo         Boolean      @default(true)
+
+  @@unique([organizationId, fecha])
+  @@map("dia_no_laborable")
+}
+
+// "Ocupada" no se guarda: se calcula a partir de las clases en curso.
+model Aula {
+  id                  String            @id @default(cuid())
+  organizationId      String
+  organization        Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  codigo              String
+  edificio            String
+  piso                String
+  capacidad           Int
+  equipamiento        String[]
+  estado              EstadoAula        @default(DISPONIBLE)
+  observaciones       String?
+  activa              Boolean           @default(true)
+  horarios            Horario[]
+  clases              ClaseProgramada[]
+  novedadesNuevas     Novedad[]         @relation("NovedadAulaNueva")
+  novedadesAnteriores NovedadClase[]    @relation("NovedadClaseAulaAnterior")
+  edicionesNuevas     NovedadEdicion[]  @relation("NovedadEdicionAulaNueva")
+  edicionesPrevias    NovedadEdicion[]  @relation("NovedadEdicionAulaPrevia")
+  solicitudes         SolicitudAula[]
+  sesionesQr          SesionQr[]
+  incidencias         Incidencia[]
+  asignaciones        AsignacionAula[]
+
+  @@unique([organizationId, codigo])
+  @@map("aula")
+}
+
+// ---------- SiGA: clases, estado institucional y novedades ----------
+
+enum EstadoClase {
+  PROGRAMADA
+  DEMORADA
+  DOCENTE_PRESENTE
+  VIRTUAL
+  AUSENTE
+  SUSPENDIDA
+  FINALIZADA
+}
+
+enum Modalidad {
+  PRESENCIAL
+  VIRTUAL
+}
+
+enum TipoNovedad {
+  AUSENCIA
+  DEMORA
+  VIRTUAL
+  SUSPENSION
+  CAMBIO_AULA
+}
+
+enum EstadoNovedad {
+  ACTIVA
+  FINALIZADA
+}
+
+enum EstadoInstitucion {
+  ABIERTA
+  CERRADA
+  ABIERTA_CON_NOVEDADES
+}
+
+// Instancia de dictado. `fecha` es el día en hora argentina; `inicio` y `fin` son los
+// instantes exactos de la franja, para comparar con "ahora" sin convertir zonas.
+model ClaseProgramada {
+  id              String             @id @default(cuid())
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  comisionId      String
+  comision        Comision           @relation(fields: [comisionId], references: [id], onDelete: Cascade)
+  horarioId       String?
+  horario         Horario?           @relation(fields: [horarioId], references: [id], onDelete: SetNull)
+  fecha           DateTime           @db.Date
+  inicio          DateTime
+  fin             DateTime
+  aulaId          String?
+  aula            Aula?              @relation(fields: [aulaId], references: [id], onDelete: SetNull)
+  modalidad       Modalidad          @default(PRESENCIAL)
+  estado          EstadoClase        @default(PROGRAMADA)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  novedades       NovedadClase[]
+  solicitudesAula SolicitudAula[]
+  asistencia      AsistenciaDocente?
+  asignaciones    AsignacionAula[]
+
+  @@unique([comisionId, inicio])
+  @@index([organizationId, fecha])
+  @@index([aulaId, inicio])
+  @@index([organizationId, estado, fin])
+  @@map("clase_programada")
+}
+
+// Solo inserts: el estado vigente es la fila con el `desde` más reciente.
+model EstadoInstitucional {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  estado         EstadoInstitucion
+  motivo         String?
+  desde          DateTime
+  vigenciaHasta  DateTime?
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime          @default(now())
+
+  @@index([organizationId, desde])
+  @@map("estado_institucional")
+}
+
+model Novedad {
+  id                  String         @id @default(cuid())
+  organizationId      String
+  organization        Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  comisionId          String
+  comision            Comision       @relation(fields: [comisionId], references: [id], onDelete: Cascade)
+  tipo                TipoNovedad
+  minutosDemora       Int?
+  enlaceVirtual       String?
+  aulaNuevaId         String?
+  aulaNueva           Aula?          @relation("NovedadAulaNueva", fields: [aulaNuevaId], references: [id], onDelete: SetNull)
+  mensaje             String?
+  estado              EstadoNovedad  @default(ACTIVA)
+  publicadaPorId      String
+  publicadaPor        User           @relation("NovedadPublicadaPor", fields: [publicadaPorId], references: [id], onDelete: Cascade)
+  publicadaPorBedelia Boolean        @default(false)
+  finalizadaEn        DateTime?
+  finalizadaPorId     String?
+  finalizadaPor       User?          @relation("NovedadFinalizadaPor", fields: [finalizadaPorId], references: [id], onDelete: SetNull)
+  createdAt           DateTime       @default(now())
+  clases              NovedadClase[]
+  ediciones           NovedadEdicion[]
+  notificaciones      Notificacion[]
+
+  @@index([organizationId, createdAt])
+  @@index([comisionId, estado])
+  @@index([publicadaPorId])
+  @@map("novedad")
+}
+
+// Una edición de la novedad (DAT-3): los datos que quedaron vigentes y los que tenía antes, para
+// mostrar la publicación original y cada cambio sin borrar nada. Solo inserts.
+model NovedadEdicion {
+  id                    String   @id @default(cuid())
+  novedadId             String
+  novedad               Novedad  @relation(fields: [novedadId], references: [id], onDelete: Cascade)
+  editadaPorId          String
+  editadaPor            User     @relation("NovedadEdicionEditadaPor", fields: [editadaPorId], references: [id], onDelete: Cascade)
+  editadaPorBedelia     Boolean  @default(false)
+  minutosDemora         Int?
+  enlaceVirtual         String?
+  aulaNuevaId           String?
+  aulaNueva             Aula?    @relation("NovedadEdicionAulaNueva", fields: [aulaNuevaId], references: [id], onDelete: SetNull)
+  mensaje               String?
+  minutosDemoraPrevios  Int?
+  enlaceVirtualPrevio   String?
+  aulaPreviaId          String?
+  aulaPrevia            Aula?    @relation("NovedadEdicionAulaPrevia", fields: [aulaPreviaId], references: [id], onDelete: SetNull)
+  mensajePrevio         String?
+  createdAt             DateTime @default(now())
+
+  @@index([novedadId, createdAt])
+  @@map("novedad_edicion")
+}
+
+// `aulaAnteriorId` guarda el aula que tenía la clase antes de un Cambio de aula, para
+// restituirla al finalizar la novedad si sigue libre.
+model NovedadClase {
+  novedadId      String
+  novedad        Novedad         @relation(fields: [novedadId], references: [id], onDelete: Cascade)
+  claseId        String
+  clase          ClaseProgramada @relation(fields: [claseId], references: [id], onDelete: Cascade)
+  aulaAnteriorId String?
+  aulaAnterior   Aula?           @relation("NovedadClaseAulaAnterior", fields: [aulaAnteriorId], references: [id], onDelete: SetNull)
+
+  @@id([novedadId, claseId])
+  @@index([claseId])
+  @@map("novedad_clase")
+}
+
+model ComisionSeguida {
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comisionId     String
+  comision       Comision     @relation(fields: [comisionId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@id([userId, comisionId])
+  @@index([comisionId])
+  @@map("comision_seguida")
+}
+
+enum TipoNotificacion {
+  NOVEDAD
+  AVISO
+}
+
+// Un envío por destinatario. El resultado vive en el email asociado (`email.status`); `novedadId`
+// referencia la novedad o el aviso que lo originó.
+model Notificacion {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  destinatarioId String
+  destinatario   User             @relation(fields: [destinatarioId], references: [id], onDelete: Cascade)
+  tipo           TipoNotificacion
+  novedadId      String?
+  novedad        Novedad?         @relation(fields: [novedadId], references: [id], onDelete: SetNull)
+  avisoId        String?
+  aviso          Aviso?           @relation(fields: [avisoId], references: [id], onDelete: SetNull)
+  emailId        String           @unique
+  email          EmailOutbox      @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  createdAt      DateTime         @default(now())
+
+  @@index([destinatarioId, createdAt])
+  @@index([novedadId])
+  @@index([avisoId])
+  @@map("notificacion")
+}
+
+enum EstadoSolicitudAula {
+  PENDIENTE
+  ASIGNADA
+  APROBADA
+  RECHAZADA
+}
+
+// Pedido de aula de un docente o bedel para una clase. Pendiente no reserva el aula (se
+// verifica al aprobar); Asignada nace cuando la clase no tenía aula y empieza en menos de 30
+// minutos. Hay a lo sumo una Pendiente por clase.
+model SolicitudAula {
+  id             String              @id @default(cuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  solicitanteId  String
+  solicitante    User                @relation(fields: [solicitanteId], references: [id], onDelete: Cascade)
+  claseId        String
+  clase          ClaseProgramada     @relation(fields: [claseId], references: [id], onDelete: Cascade)
+  aulaId         String
+  aula           Aula                @relation(fields: [aulaId], references: [id], onDelete: Cascade)
+  alumnos        Int
+  recursos       String[]
+  comentario     String?
+  estado         EstadoSolicitudAula @default(PENDIENTE)
+  motivoRechazo  String?
+  resueltaPorId  String?
+  resueltaPor    User?               @relation("SolicitudAulaResueltaPor", fields: [resueltaPorId], references: [id], onDelete: SetNull)
+  resueltaEn     DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([organizationId, solicitanteId, createdAt])
+  @@index([organizationId, estado, createdAt])
+  @@index([claseId, estado])
+  @@map("solicitud_aula")
+}
+
+// Cada código de QR de asistencia emitido por un bedel. `token` es único y firmado; `venceEn`
+// es el menor entre 60 s desde `emitidoEn` y el fin del turno.
+model SesionQr {
+  id             String              @id @default(cuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  aulaId         String
+  aula           Aula                @relation(fields: [aulaId], references: [id], onDelete: Cascade)
+  fecha          DateTime            @db.Date
+  turno          Turno
+  token          String
+  emitidoEn      DateTime            @default(now())
+  venceEn        DateTime
+  bedelId        String
+  bedel          User                @relation(fields: [bedelId], references: [id], onDelete: Cascade)
+  asistencias    AsistenciaDocente[]
+
+  @@unique([token])
+  @@index([organizationId, emitidoEn])
+  @@index([aulaId, fecha, turno])
+  @@map("sesion_qr")
+}
+
+enum PrioridadAviso {
+  NORMAL
+  URGENTE
+}
+
+// Sin edición ni borrado. El segmento suma criterios: `todos`, o cualquiera de `perfiles`,
+// `carreraIds`, `anios` y `comisionIds` (estos tres, sobre las comisiones que el destinatario
+// sigue o dicta). Vigente entre `desde` y `hasta`; vencido pasa al historial.
+model Aviso {
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  titulo          String
+  cuerpo          String
+  prioridad       PrioridadAviso @default(NORMAL)
+  todos           Boolean
+  perfiles        Perfil[]
+  carreraIds      String[]
+  anios           Int[]
+  comisionIds     String[]
+  desde           DateTime
+  hasta           DateTime
+  enviarPorCorreo Boolean        @default(false)
+  publicadoPorId  String
+  publicadoPor    User           @relation("AvisoPublicadoPor", fields: [publicadoPorId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now())
+  notificaciones  Notificacion[]
+
+  @@index([organizationId, hasta])
+  @@index([organizationId, createdAt])
+  @@map("aviso")
+}
+
+enum MetodoAsistencia {
+  QR
+  MANUAL
+}
+
+// Cómo se validó la presencia del docente en el registro por QR: dentro del radio de la sede o
+// desde la red institucional. Nunca se guardan las coordenadas (ETI-3).
+enum ValidacionPresencia {
+  UBICACION
+  RED
+}
+
+// La asistencia del docente a una clase: una sola por clase, sea por QR o manual. `horaLlegada`
+// es el instante de llegada; `registradaPorId` es quien la cargó (el Bedel en el registro
+// manual, el propio docente en el QR). `motivo` solo existe en el registro manual.
+model AsistenciaDocente {
+  id              String               @id @default(cuid())
+  organizationId  String
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claseId         String               @unique
+  clase           ClaseProgramada      @relation(fields: [claseId], references: [id], onDelete: Cascade)
+  docenteId       String
+  docente         User                 @relation("AsistenciaDocente", fields: [docenteId], references: [id], onDelete: Cascade)
+  metodo          MetodoAsistencia
+  horaLlegada     DateTime
+  motivo          String?
+  validacion      ValidacionPresencia?
+  sesionQrId      String?
+  sesionQr        SesionQr?            @relation(fields: [sesionQrId], references: [id], onDelete: SetNull)
+  registradaPorId String
+  registradaPor   User                 @relation("AsistenciaRegistrada", fields: [registradaPorId], references: [id], onDelete: Cascade)
+  createdAt       DateTime             @default(now())
+
+  @@unique([sesionQrId, docenteId])
+  @@index([organizationId, createdAt])
+  @@map("asistencia_docente")
+}
+
+// SEG-9: cada intento de registro por QR rechazado (código inválido, sin clase o fuera de la
+// institución). Con 10 en 15 minutos el docente queda bloqueado 15 minutos.
+model IntentoAsistenciaFallido {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  motivo         String
+  createdAt      DateTime     @default(now())
+
+  @@index([userId, createdAt])
+  @@map("intento_asistencia_fallido")
+}
+
+// ---------- SiGA: incidencias de infraestructura ----------
+
+enum ElementoIncidencia {
+  PROYECTOR
+  CLIMATIZACION
+  ILUMINACION
+  MOBILIARIO
+  CONECTIVIDAD
+  OTRO
+}
+
+enum GravedadIncidencia {
+  LEVE
+  IMPIDE_USO
+}
+
+enum EstadoIncidencia {
+  ABIERTA
+  EN_CURSO
+  RESUELTA
+}
+
+// `fotoKey` es la clave del objeto en el bucket (ya comprimido a 1 MB o menos); la base no
+// guarda el archivo. Nace ABIERTA y el estado solo avanza; el historial vive en `IncidenciaEstado`.
+model Incidencia {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  aulaId         String
+  aula           Aula               @relation(fields: [aulaId], references: [id], onDelete: Cascade)
+  elemento       ElementoIncidencia
+  descripcion    String
+  gravedad       GravedadIncidencia
+  estado         EstadoIncidencia   @default(ABIERTA)
+  fotoKey        String?
+  reportadaPorId String
+  reportadaPor   User               @relation(fields: [reportadaPorId], references: [id], onDelete: Cascade)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  historial      IncidenciaEstado[]
+
+  @@index([organizationId, estado, createdAt])
+  @@index([aulaId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("incidencia")
+}
+
+// Solo inserts: una fila por estado que tomó la incidencia, con quién y cuándo.
+model IncidenciaEstado {
+  id            String           @id @default(cuid())
+  incidenciaId  String
+  incidencia    Incidencia       @relation(fields: [incidenciaId], references: [id], onDelete: Cascade)
+  estado        EstadoIncidencia
+  observaciones String?
+  userId        String
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime         @default(now())
+
+  @@index([incidenciaId, createdAt])
+  @@index([userId])
+  @@map("incidencia_estado")
+}
+
+// ---------- SiGA: histórico de uso de aulas ----------
+
+enum OrigenAsignacionAula {
+  GENERACION_CLASES
+  SOLICITUD_APROBADA
+  ASIGNACION_INMEDIATA
+  ASIGNACION_BEDELIA
+  CAMBIO_AULA
+}
+
+// Solo inserts: cada vez que una clase recibe aula se guarda quién, cómo y cuándo (RF-09,
+// EF-5). `usuarioId` es nulo cuando no consta (generación de clases desde el seed o una
+// cuenta eliminada).
+model AsignacionAula {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claseId        String
+  clase          ClaseProgramada      @relation(fields: [claseId], references: [id], onDelete: Cascade)
+  aulaId         String
+  aula           Aula                 @relation(fields: [aulaId], references: [id], onDelete: Cascade)
+  origen         OrigenAsignacionAula
+  usuarioId      String?
+  usuario        User?                @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  createdAt      DateTime             @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, aulaId, createdAt])
+  @@index([claseId])
+  @@map("asignacion_aula")
 }
