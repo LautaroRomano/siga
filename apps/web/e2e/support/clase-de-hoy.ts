@@ -129,3 +129,80 @@ export const eliminarClaseSinAula = async (claseId: string, aulaId: string) => {
   await prisma.claseProgramada.delete({ where: { id: claseId } });
   await prisma.aula.delete({ where: { id: aulaId } });
 };
+
+const comienzoDelDia = (fecha: string) => instanteArgentino(fecha, "00:00").getTime();
+
+// Un edificio propio con tres aulas: una con una clase de 5K2 en curso, una libre y una de
+// destino en otro piso, más una clase de 5K2 de hoy sin aula, también en curso. Sirve para
+// asignar, mover y reemplazar desde el plano sin depender del seed.
+export const crearEscenarioDeAsignacion = async () => {
+  const { prisma, toDateColumn } = await abrirBase();
+  const comision = await prisma.comision.findUniqueOrThrow({ where: { id: "comision-5k2-pf" } });
+  const marca = Date.now().toString(36);
+  const edificio = `Asignar ${marca}`;
+  const crearAula = (codigo: string, piso: string) =>
+    prisma.aula.create({
+      data: { organizationId: comision.organizationId, codigo, edificio, piso, capacidad: 60 },
+    });
+  const [conClase, libre, destino] = await Promise.all([
+    crearAula(`Aula Ocupada ${marca}`, "PB"),
+    crearAula(`Aula Libre ${marca}`, "PB"),
+    crearAula(`Aula Destino ${marca}`, "1.º piso"),
+  ]);
+  // Pasada la medianoche "hace 40 minutos" cae ayer: la clase sin aula debe ser de hoy, y las
+  // dos clases no pueden compartir inicio (único por comisión).
+  const hoy = fechaArgentina(new Date());
+  const crearClase = (inicio: Date, aulaId: string | null) =>
+    prisma.claseProgramada.create({
+      data: {
+        organizationId: comision.organizationId,
+        comisionId: comision.id,
+        fecha: toDateColumn(fechaArgentina(inicio)),
+        inicio,
+        fin: new Date(Date.now() + 90 * 60_000),
+        aulaId,
+      },
+    });
+  const haceMinutos = (minutos: number) => new Date(Date.now() - minutos * 60_000);
+  const enCurso = await crearClase(haceMinutos(10 + Math.floor(Math.random() * 20)), conClase.id);
+  const sinAula = await crearClase(
+    new Date(
+      Math.max(
+        haceMinutos(31 + Math.floor(Math.random() * 20)).getTime(),
+        comienzoDelDia(hoy) + 60_000,
+      ),
+    ),
+    null,
+  );
+  return {
+    edificio,
+    conClase,
+    libre,
+    destino,
+    claseEnCursoId: enCurso.id,
+    claseSinAulaId: sinAula.id,
+    desde: new Date(),
+  };
+};
+
+export const eliminarEscenarioDeAsignacion = async (
+  escenario: Awaited<ReturnType<typeof crearEscenarioDeAsignacion>>,
+) => {
+  const { prisma } = await abrirBase();
+  await prisma.claseProgramada.deleteMany({
+    where: { id: { in: [escenario.claseEnCursoId, escenario.claseSinAulaId] } },
+  });
+  await prisma.aula.deleteMany({
+    where: { id: { in: [escenario.conClase.id, escenario.libre.id, escenario.destino.id] } },
+  });
+  await prisma.novedad.deleteMany({ where: { clases: { none: {} } } });
+  await prisma.emailOutbox.deleteMany({
+    where: {
+      createdAt: { gte: escenario.desde },
+      OR: [
+        { subject: { startsWith: "Aula asignada" } },
+        { subject: { startsWith: "Cambio de aula" } },
+      ],
+    },
+  });
+};
