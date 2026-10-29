@@ -116,7 +116,12 @@ export const generarClases = async (
   hoy?: string,
 ): Promise<GeneracionClasesDto> => {
   const organizationId = await gestor(auth);
-  return generarClasesProgramadas(prisma, organizationId, filtro, hoy);
+  return generarClasesProgramadas(
+    prisma,
+    organizationId,
+    { ...filtro, usuarioId: auth.userId },
+    hoy,
+  );
 };
 
 // ---------- Administración (RF-13): Bedel y Autoridad ----------
@@ -763,7 +768,7 @@ export const actualizarHorario = async (
       data: { ...input },
       include: horarioGestionInclude,
     });
-    await reubicarClasesFuturas(tx, id, actual.diaSemana);
+    await reubicarClasesFuturas(tx, id, actual.diaSemana, new Date(), auth.userId);
     return editado;
   });
   return toHorarioGestionDto(horario);
