@@ -30,7 +30,7 @@ test.describe("Móvil", () => {
     isMobile,
   }) => {
     test.skip(!isMobile, "Solo aplica al viewport de celular");
-    await expect(page.getByRole("button", { name: "Toggle Sidebar" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Alternar menú lateral" })).toBeVisible();
     const fontFamily = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
     expect(fontFamily).toContain("Google Sans");
   });
@@ -84,7 +84,7 @@ test.describe("Móvil", () => {
     isMobile,
   }) => {
     test.skip(!isMobile, "Solo aplica al menú lateral móvil");
-    await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+    await page.getByRole("button", { name: "Alternar menú lateral" }).click();
     const sidebar = page.locator('[data-slot="sidebar"][data-mobile="true"]');
     await sidebar.getByRole("link", { name: "Buscar" }).click();
     await expect(page).toHaveURL(/\/clases/);
