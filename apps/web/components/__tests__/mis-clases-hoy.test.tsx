@@ -107,7 +107,7 @@ describe("MisClasesHoy", () => {
 
   it("lista cada clase con materia, comisión, horario, aula, estado y la novedad activa", () => {
     renderWithProviders(<MisClasesHoy />);
-    expect(screen.getByText("miércoles 14 de octubre")).toBeInTheDocument();
+    expect(screen.getByText("Miércoles 14 de octubre")).toBeInTheDocument();
     expect(screen.getByText("1 clase · 5K2")).toBeInTheDocument();
     expect(screen.getByText("Proyecto Final")).toBeInTheDocument();
     expect(screen.getByText("19:00 – 23:00 · Aula 12, Edificio A, 1.º piso")).toBeInTheDocument();
@@ -135,5 +135,11 @@ describe("MisClasesHoy", () => {
     renderWithProviders(<ClasesDelDia ambito="todas" emptyTitle="Sin clases" />);
     expect(screen.getByText("Proyecto Final")).toBeVisible();
     expect(screen.queryByRole("button", { name: /^Acciones de/ })).toBeNull();
+  });
+
+  it("el encabezado del Bedel va en minúscula salvo el inicio: Hoy · jueves 29 de octubre", () => {
+    state.clases = { fecha: "2026-10-29", clases: [clase] };
+    renderWithProviders(<ClasesDelDia ambito="todas" emptyTitle="Sin clases" />);
+    expect(screen.getByRole("heading", { name: "Hoy · jueves 29 de octubre" })).toBeVisible();
   });
 });

@@ -1,5 +1,5 @@
 import type { EstadoInstitucionalDto } from "@repo/api/client";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -111,9 +111,8 @@ describe("CambiarEstadoForm", () => {
     renderWithProviders(<CambiarEstadoForm />);
     await userEvent.selectOptions(screen.getByLabelText("Nuevo estado"), "ABIERTA_CON_NOVEDADES");
     await userEvent.type(screen.getByLabelText(/Motivo/), "Paro de transporte");
-    fireEvent.change(screen.getByLabelText(/Vigencia estimada/), {
-      target: { value: "2026-10-14T23:30" },
-    });
+    await userEvent.type(screen.getByLabelText(/Vigencia estimada/), "14/10/2026");
+    await userEvent.type(screen.getByLabelText("Hora de la vigencia"), "23:30");
     await userEvent.click(screen.getByRole("button", { name: "Cambiar estado" }));
     await waitFor(() =>
       expect(cambiar).toHaveBeenCalledWith({
