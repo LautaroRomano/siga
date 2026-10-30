@@ -151,6 +151,7 @@ const aulasDocente: SeccionManual = {
     'En la lista de "Solicitudes de aula" seguís su estado.',
   ],
   mensajes: [
+    'No hay clases para pedir aula: en la fecha elegida no tenés clases que admitan el pedido. No aparecen las que ya terminaron ni las suspendidas, con ausencia docente o virtuales. Elegí otra fecha o tocá "Ver mis solicitudes".',
     "Pendiente: bedelía todavía no respondió. Asignada: el aula se asignó enseguida. Aprobada: bedelía aceptó la solicitud. Rechazada: se muestra el motivo.",
   ],
 };
