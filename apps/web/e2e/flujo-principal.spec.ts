@@ -1,10 +1,13 @@
 import {
   expect,
+  expectBadgeDentroDelEncabezado,
+  expectNoHorizontalPageScroll,
   loginViaUi,
   logoutViaUi,
   newUser,
   registerViaUi,
   seededUsers,
+  sinAvisosVigentes,
   test,
   verifyEmailViaLink,
 } from "./support/fixtures";
@@ -41,7 +44,8 @@ test.describe("Flujo principal de SiGA", () => {
     await expect(page.getByText("Ese ya es el estado actual.")).toBeVisible();
 
     await page.getByLabel("Nuevo estado").selectOption("ABIERTA_CON_NOVEDADES");
-    await page.getByLabel(/Motivo/).fill("Paro de transporte: las clases se dictan con normalidad");
+    const motivo = "Paro de transporte: las clases se dictan con normalidad".padEnd(280, " y");
+    await page.getByLabel(/Motivo/).fill(motivo);
     await page.getByRole("button", { name: "Cambiar estado" }).click();
     await expect(page.getByText("Estado registrado")).toBeVisible();
     await page.getByRole("button", { name: "Ahora no" }).click();
@@ -50,6 +54,27 @@ test.describe("Flujo principal de SiGA", () => {
     await expect(historial.getByRole("row").nth(1)).toContainText("Abierta con novedades");
     await expect(historial.getByRole("row").nth(1)).toContainText("Paro de transporte");
     await expect(historial.getByRole("row").nth(1)).toContainText(seededUsers.bedel.name);
+
+    // Un solo aviso: el indicador con el motivo, sin banner, en una pantalla de clases y en otra que no lo es.
+    const indicador = page.getByRole("link", { name: /Abierta con novedades, Paro de transporte/ });
+    for (const ruta of ["/clases", "/novedades"]) {
+      await page.goto(ruta);
+      await expect(indicador).toBeVisible();
+      await expect(indicador).toContainText("Paro de transporte: las clases se dictan");
+      const titulo = page.locator("header h1");
+      expect(await titulo.evaluate((h1) => h1.scrollWidth <= h1.clientWidth)).toBe(true);
+      await expect(page.locator("[data-slot=alert]")).toHaveCount(0);
+    }
+    await sinAvisosVigentes(page);
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto("/estado-institucional");
+    const badge = indicador.locator("[data-estado]");
+    await expect(badge).toBeVisible();
+    await expect(indicador.getByText("Paro de transporte")).toBeHidden();
+    await expectBadgeDentroDelEncabezado(page);
+    await expectNoHorizontalPageScroll(page);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/estado-institucional");
 
     // Se deja la institución como estaba para el resto de la suite.
     await page.getByLabel("Nuevo estado").selectOption("ABIERTA");

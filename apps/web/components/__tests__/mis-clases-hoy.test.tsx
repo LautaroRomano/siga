@@ -118,11 +118,12 @@ describe("MisClasesHoy", () => {
     ).toBeInTheDocument();
   });
 
-  it("con la institución cerrada muestra el aviso destacado con el motivo", () => {
+  it("con la institución cerrada no muestra banner: el aviso es del indicador del encabezado", () => {
     state.estado = { ...abierta, estado: "CERRADA", motivo: "Paro docente nacional" };
     renderWithProviders(<MisClasesHoy />);
-    expect(screen.getByText("Institución cerrada")).toBeInTheDocument();
-    expect(screen.getByText("Paro docente nacional")).toBeInTheDocument();
+    expect(screen.queryByText("Institución cerrada")).not.toBeInTheDocument();
+    expect(screen.queryByText("Paro docente nacional")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("el Estudiante y la Autoridad no ven el menú de acciones en sus tarjetas", () => {
