@@ -50,6 +50,9 @@ test.describe("Flujo principal de SiGA", () => {
     await expect(page.getByText("Estado registrado")).toBeVisible();
     await page.getByRole("button", { name: "Ahora no" }).click();
     await expect(page.getByRole("link", { name: /Abierta con novedades/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Abierta con novedades/ })).toContainText(
+      /Desde las \d{2}:\d{2}/,
+    );
     const historial = page.locator("table");
     await expect(historial.getByRole("row").nth(1)).toContainText("Abierta con novedades");
     await expect(historial.getByRole("row").nth(1)).toContainText("Paro de transporte");
@@ -61,6 +64,10 @@ test.describe("Flujo principal de SiGA", () => {
       await page.goto(ruta);
       await expect(indicador).toBeVisible();
       await expect(indicador).toContainText("Paro de transporte: las clases se dictan");
+      await expect(indicador).toContainText(/Desde las \d{2}:\d{2}/);
+      await expect(indicador).not.toContainText("Actualizado");
+      const desde = indicador.getByText(/^Desde /);
+      expect(await desde.evaluate((span) => span.scrollWidth <= span.clientWidth)).toBe(true);
       const titulo = page.locator("header h1");
       expect(await titulo.evaluate((h1) => h1.scrollWidth <= h1.clientWidth)).toBe(true);
       await expect(page.locator("[data-slot=alert]")).toHaveCount(0);
@@ -71,6 +78,7 @@ test.describe("Flujo principal de SiGA", () => {
     const badge = indicador.locator("[data-estado]");
     await expect(badge).toBeVisible();
     await expect(indicador.getByText("Paro de transporte")).toBeHidden();
+    await expect(indicador.getByText(/^Desde /)).toBeHidden();
     await expectBadgeDentroDelEncabezado(page);
     await expectNoHorizontalPageScroll(page);
     await page.setViewportSize({ width: 1280, height: 720 });
