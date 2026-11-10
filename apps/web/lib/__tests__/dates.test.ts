@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  capitalizarPrimera,
   formatDate,
+  formatDesde,
   formatDateTime,
   formatFechaCorta,
   formatFechaHora,
   formatFechaLarga,
   formatHora,
+  isoArgentinoAInput,
+  inputArgentinoAIso,
 } from "../dates";
 
 describe("fechas en es-AR", () => {
@@ -24,8 +28,26 @@ describe("fechas en es-AR", () => {
     expect(formatFechaHora("2026-10-15T02:30:00.000Z")).toBe("14/10/2026 23:30");
   });
 
+  it("dice desde cuándo rige según el día argentino, sin importar la zona del navegador", () => {
+    const ahora = new Date("2026-10-15T02:10:00.000Z");
+    expect(formatDesde("2026-10-14T18:32:00.000Z", ahora)).toBe("las 15:32");
+    expect(formatDesde("2026-10-14T02:59:00.000Z", ahora)).toBe("ayer 23:59");
+    expect(formatDesde("2026-10-12T20:20:00.000Z", ahora)).toBe("el 12/10/2026 17:20");
+  });
+
   it("escribe una fecha de negocio larga y corta", () => {
     expect(formatFechaLarga("2026-10-14")).toBe("miércoles 14 de octubre");
     expect(formatFechaCorta("2026-10-14")).toBe("14/10/2026");
+  });
+
+  it("capitaliza solo la primera letra del encabezado", () => {
+    expect(capitalizarPrimera(formatFechaLarga("2026-10-29"))).toBe("Jueves 29 de octubre");
+    expect(capitalizarPrimera("")).toBe("");
+  });
+
+  it("convierte entre el valor del control y el instante en hora argentina", () => {
+    expect(inputArgentinoAIso("2026-10-14T23:30")).toBe("2026-10-14T23:30:00-03:00");
+    expect(isoArgentinoAInput("2026-10-14T23:30:00-03:00")).toBe("2026-10-14T23:30");
+    expect(isoArgentinoAInput(undefined)).toBe("");
   });
 });

@@ -213,9 +213,9 @@ describe("contrato HTTP", () => {
       "/api/v1/clases/{id}",
       "/api/v1/novedades",
       "/api/v1/novedades/{id}/finalizar",
-      "/api/v1/historico/novedades",
+      "/api/v1/novedades/historial",
       "/api/v1/historico/uso-aulas",
-      "/api/v1/historico/incidencias",
+      "/api/v1/incidencias/historial",
       "/api/v1/historico/opciones",
       "/api/v1/preferencias",
       "/api/v1/carreras",
@@ -283,6 +283,7 @@ describe("SiGA: perfiles y flujo principal por HTTP", () => {
     const institution = await createInstitution();
     const estudiante = await createUserWithPerfil(institution, "ESTUDIANTE");
     const docente = await createUserWithPerfil(institution, "DOCENTE");
+    const autoridad = await createUserWithPerfil(institution, "AUTORIDAD");
     const como = (user: Parameters<typeof authOf>[1]) =>
       getAuthContext.mockResolvedValueOnce(authOf(institution, user));
 
@@ -292,8 +293,10 @@ describe("SiGA: perfiles y flujo principal por HTTP", () => {
     ).toBe(403);
     como(estudiante);
     expect((await call("/novedades")).status).toBe(403);
+    como(estudiante);
+    expect((await call("/novedades/historial?desde=2026-01-01&hasta=2026-01-31")).status).toBe(403);
     como(docente);
-    expect((await call("/historico/novedades?desde=2026-01-01&hasta=2026-01-31")).status).toBe(403);
+    expect((await call("/novedades/historial?desde=2026-01-01&hasta=2026-01-31")).status).toBe(200);
     como(estudiante);
     expect((await call("/historico/opciones")).status).toBe(403);
     como(docente);
@@ -312,17 +315,36 @@ describe("SiGA: perfiles y flujo principal por HTTP", () => {
     ]);
     como(institution);
     expect((await call("/historico/uso-aulas?desde=2026-01-01&hasta=2026-01-31")).status).toBe(200);
-    como(estudiante);
-    expect((await call("/historico/incidencias?desde=2026-01-01&hasta=2026-01-31")).status).toBe(
+    como(docente);
+    expect((await call("/incidencias/historial?desde=2026-01-01&hasta=2026-01-31")).status).toBe(
       403,
     );
+    const denegados = () =>
+      prisma.auditLog.count({ where: { entity: "Permiso", action: "acceso_denegado" } });
+    const antes = await denegados();
+    como(docente);
+    expect((await call("/incidencias/historial?desde=2026-01-01&hasta=2026-01-31")).status).toBe(
+      403,
+    );
+    expect(await denegados()).toBe(antes + 1);
+    como(estudiante);
+    expect((await call("/novedades/historial?desde=2026-01-01&hasta=2026-01-31")).status).toBe(403);
+    expect(await denegados()).toBe(antes + 2);
     como(institution);
-    const incidencias = await call("/historico/incidencias?desde=2024-01-01&hasta=2026-01-01");
+    const incidencias = await call("/incidencias/historial?desde=2024-01-01&hasta=2026-01-01");
     expect(incidencias.status).toBe(422);
     como(institution);
-    expect((await call("/historico/incidencias?desde=2026-01-01&hasta=2026-01-31")).status).toBe(
+    expect((await call("/incidencias/historial?desde=2026-01-01&hasta=2026-01-31")).status).toBe(
       200,
     );
+    como(autoridad);
+    expect((await call("/incidencias/historial?desde=2026-01-01&hasta=2026-01-31")).status).toBe(
+      200,
+    );
+    como(autoridad);
+    expect((await call("/incidencias")).status).toBe(200);
+    como(autoridad);
+    expect((await call("/incidencias", json({}))).status).toBe(403);
     como(docente);
     expect((await call("/preferencias")).status).toBe(403);
     como(docente);
@@ -336,6 +358,44 @@ describe("SiGA: perfiles y flujo principal por HTTP", () => {
       expect((await call("/aulas/x/baja", json({}))).status).toBe(403);
       como(perfil);
       expect((await call("/aulas/plano")).status).toBe(200);
+    }
+    for (const perfil of [docente, estudiante, autoridad]) {
+      como(perfil);
+      expect((await call("/planos")).status).toBe(403);
+      como(perfil);
+      expect((await call("/planos/x")).status).toBe(403);
+      como(perfil);
+      expect(
+        (await call("/planos/imagen", json({ contentType: "image/png", size: 1000 }))).status,
+      ).toBe(403);
+      como(perfil);
+      expect(
+        (await call("/planos", json({ edificio: "A", piso: "1", key: "k", ancho: 10, alto: 10 })))
+          .status,
+      ).toBe(403);
+      como(perfil);
+      expect(
+        (
+          await call(
+            "/planos/x/aulas",
+            json({
+              capacidadPorDefecto: 30,
+              aulas: [
+                {
+                  codigo: "A",
+                  poligono: [
+                    { x: 0.1, y: 0.1 },
+                    { x: 0.3, y: 0.1 },
+                    { x: 0.3, y: 0.3 },
+                  ],
+                },
+              ],
+            }),
+          )
+        ).status,
+      ).toBe(403);
+      como(perfil);
+      expect((await call("/planos/x/deteccion", json({}))).status).toBe(403);
     }
 
     como(institution);
@@ -638,6 +698,45 @@ describe("Solicitudes de aula por HTTP", () => {
     expect(((await (await call("/solicitudes-aula/mias")).json()) as unknown[]).length).toBe(1);
   });
 
+  it("el Bedel busca aulas con o sin filtros pero no crea ni lista solicitudes propias", async () => {
+    const institution = await createInstitution();
+    const fixture = await seedAcademicFixture(institution);
+    const clase = await createClase(institution, fixture, "2099-10-14");
+    getAuthContext.mockResolvedValue(authOf(institution, institution));
+
+    const sinFiltros = await call(`/solicitudes-aula/aulas?claseId=${clase.id}&alumnos=`);
+    expect(sinFiltros.status).toBe(200);
+    expect(((await sinFiltros.json()) as { aulas: unknown[] }).aulas.length).toBeGreaterThan(0);
+    expect((await call(`/solicitudes-aula/aulas?claseId=${clase.id}&alumnos=2.5`)).status).toBe(
+      422,
+    );
+
+    expect((await call("/solicitudes-aula/clases")).status).toBe(403);
+    expect((await call("/solicitudes-aula/mias")).status).toBe(403);
+    const pedido = { claseId: clase.id, aulaId: fixture.otraAulaId, alumnos: 40, recursos: [] };
+    expect((await call("/solicitudes-aula", json(pedido))).status).toBe(403);
+  });
+
+  it("el Bedel lista solicitudes de varios estados y un estado inválido devuelve 422", async () => {
+    const institution = await createInstitution();
+    getAuthContext.mockResolvedValue(authOf(institution, institution));
+
+    const varios = await call("/solicitudes-aula?estado=RECHAZADA,PENDIENTE");
+    expect(varios.status).toBe(200);
+    expect(await varios.json()).toEqual([]);
+    expect((await call("/solicitudes-aula?estado=PENDIENTE,OTRO")).status).toBe(422);
+    expect((await call("/solicitudes-aula?estado=")).status).toBe(422);
+    expect((await call("/solicitudes-aula")).status).toBe(422);
+  });
+
+  it("el Docente debe informar la cantidad de alumnos para buscar aulas", async () => {
+    const institution = await createInstitution();
+    const fixture = await seedAcademicFixture(institution);
+    const clase = await createClase(institution, fixture, "2099-10-14");
+    getAuthContext.mockResolvedValue(authOf(institution, fixture.docente));
+    expect((await call(`/solicitudes-aula/aulas?claseId=${clase.id}`)).status).toBe(422);
+  });
+
   it("las rutas de resolución y de clases sin aula son solo del Bedel", async () => {
     const institution = await createInstitution();
     const fixture = await seedAcademicFixture(institution);
@@ -645,7 +744,7 @@ describe("Solicitudes de aula por HTTP", () => {
     getAuthContext.mockResolvedValue(authOf(institution, fixture.docente));
     const aulaId = fixture.otraAulaId;
     for (const respuesta of [
-      await call("/solicitudes-aula?estado=PENDIENTE"),
+      await call("/solicitudes-aula?estado=PENDIENTE,ASIGNADA"),
       await call("/solicitudes-aula/x/aprobar", json({ aulaId })),
       await call("/solicitudes-aula/x/rechazar", json({ motivo: "No" })),
       await call("/solicitudes-aula/x/reasignar", json({ aulaId })),
@@ -758,7 +857,7 @@ describe("Incidencias por HTTP", () => {
     ...datos,
   });
 
-  it("Estudiante y Autoridad no ven ni reportan; el Docente reporta pero no gestiona", async () => {
+  it("el Estudiante no ve ni reporta, la Autoridad solo lee; el Docente reporta pero no gestiona", async () => {
     const institution = await createInstitution();
     const fixture = await seedAcademicFixture(institution);
     const clase = await createClase(institution, fixture, "2099-10-14");
@@ -766,7 +865,7 @@ describe("Incidencias por HTTP", () => {
       getAuthContext.mockResolvedValue(
         authOf(institution, await createUserWithPerfil(institution, perfil)),
       );
-      expect((await call("/incidencias")).status).toBe(403);
+      expect((await call("/incidencias")).status).toBe(perfil === "AUTORIDAD" ? 200 : 403);
       expect((await call("/incidencias", json(reporte(fixture.aulaId)))).status).toBe(403);
       expect(
         (await call("/incidencias/fotos", json({ contentType: "image/png", size: 10 }))).status,
@@ -810,9 +909,9 @@ describe("Incidencias por HTTP", () => {
 
     const lista = await call("/incidencias");
     expect(((await lista.json()) as unknown[]).length).toBe(1);
-    expect(((await (await call("/incidencias?estados=RESUELTA")).json()) as unknown[]).length).toBe(
-      0,
-    );
+    const rango = "desde=2026-01-01&hasta=2026-12-31";
+    const historial = await call(`/incidencias/historial?${rango}`);
+    expect(((await historial.json()) as { total: number }).total).toBe(0);
 
     const enCurso = await call(
       `/incidencias/${incidencia.id}/estado`,
@@ -901,15 +1000,50 @@ describe("política de privacidad por HTTP", () => {
     expect(await pendiente()).toBe(true);
 
     const vigente = await call("/politica-de-privacidad");
-    expect(await vigente.json()).toMatchObject({ version: 1, aceptadaEn: null });
+    expect(await vigente.json()).toMatchObject({ version: 2, aceptadaEn: null });
 
-    const vieja = await call("/politica-de-privacidad/aceptaciones", json({ version: 2 }));
+    const vieja = await call("/politica-de-privacidad/aceptaciones", json({ version: 1 }));
     expect(vieja.status).toBe(409);
     expect(await pendiente()).toBe(true);
 
-    const aceptada = await call("/politica-de-privacidad/aceptaciones", json({ version: 1 }));
+    const aceptada = await call("/politica-de-privacidad/aceptaciones", json({ version: 2 }));
     expect(aceptada.status).toBe(200);
-    expect(await aceptada.json()).toMatchObject({ version: 1, aceptadaEn: expect.any(String) });
+    expect(await aceptada.json()).toMatchObject({ version: 2, aceptadaEn: expect.any(String) });
     expect(await pendiente()).toBe(false);
+  });
+});
+
+describe("Planos por HTTP", () => {
+  it("la importación responde 422 con un polígono inválido o códigos repetidos", async () => {
+    const institution = await createInstitution();
+    getAuthContext.mockResolvedValue(authOf(institution, institution));
+    const plano = await prisma.planoPiso.create({
+      data: {
+        organizationId: institution.organizationId,
+        edificio: "Edificio A",
+        piso: "PB",
+        imagenKey: "k",
+        ancho: 10,
+        alto: 10,
+      },
+    });
+    const poligono = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+    ];
+    const importar = (aulas: object[]) =>
+      call(`/planos/${plano.id}/aulas`, json({ capacidadPorDefecto: 30, aulas }));
+
+    expect((await importar([{ codigo: "A1", poligono: poligono.slice(0, 2) }])).status).toBe(422);
+    expect(
+      (await importar([{ codigo: "A1", poligono: [...poligono, { x: 2, y: 0 }] }])).status,
+    ).toBe(422);
+    const repetidas = [
+      { codigo: "A1", poligono },
+      { codigo: "A1", poligono },
+    ];
+    expect((await importar(repetidas)).status).toBe(422);
+    expect((await importar([{ codigo: "A1", poligono }])).status).toBe(201);
   });
 });

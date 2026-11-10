@@ -1,8 +1,27 @@
-import { expect, loginViaUi, seededUsers, test } from "./support/fixtures";
+import type { Locator } from "@playwright/test";
 
-// Valor de un `datetime-local` en hora argentina, a `minutos` de ahora.
-const enMinutos = (minutos: number) =>
-  new Date(Date.now() + minutos * 60_000 - 3 * 60 * 60_000).toISOString().slice(0, 16);
+import {
+  expect,
+  expectBadgeDentroDelEncabezado,
+  loginViaUi,
+  seededUsers,
+  test,
+} from "./support/fixtures";
+
+// Fecha `dd/mm/aaaa` y hora 24 h en hora argentina, a `minutos` de ahora.
+const enMinutos = (minutos: number) => {
+  const [fecha, hora] = new Date(Date.now() + minutos * 60_000 - 3 * 60 * 60_000)
+    .toISOString()
+    .slice(0, 16)
+    .split("T") as [string, string];
+  return { fecha: fecha.split("-").reverse().join("/"), hora };
+};
+
+const cargarVigencia = async (dialog: Locator, campo: "Desde" | "Hasta", minutos: number) => {
+  const { fecha, hora } = enMinutos(minutos);
+  await dialog.getByLabel(campo, { exact: true }).fill(fecha);
+  await dialog.getByLabel(campo === "Desde" ? "Hora de inicio" : "Hora de fin").fill(hora);
+};
 
 test.describe("Avisos institucionales", () => {
   test("el bedel valida, publica un urgente con correo y lo ve en todos lados", async ({
@@ -31,19 +50,19 @@ test.describe("Avisos institucionales", () => {
     await dialog.getByLabel("Cuerpo").fill("Prueba");
     await dialog.getByLabel("Prioridad").selectOption("URGENTE");
     await dialog.getByRole("checkbox", { name: "Bedel" }).click();
-    await dialog.getByLabel("Hasta").fill(enMinutos(-60));
+    await cargarVigencia(dialog, "Hasta", -60);
     await dialog.getByRole("button", { name: "Publicar" }).click();
     await expect(dialog.getByText("La vigencia tiene que terminar en el futuro")).toBeVisible();
 
-    await dialog.getByLabel("Desde").fill(enMinutos(24 * 60));
-    await dialog.getByLabel("Hasta").fill(enMinutos(23 * 60));
+    await cargarVigencia(dialog, "Desde", 24 * 60);
+    await cargarVigencia(dialog, "Hasta", 23 * 60);
     await dialog.getByRole("button", { name: "Publicar" }).click();
     await expect(
       dialog.getByText("La vigencia tiene que terminar después de empezar"),
     ).toBeVisible();
 
-    await dialog.getByLabel("Desde").fill(enMinutos(-1));
-    await dialog.getByLabel("Hasta").fill(enMinutos(10));
+    await cargarVigencia(dialog, "Desde", -1);
+    await cargarVigencia(dialog, "Hasta", 10);
     await dialog.getByRole("switch", { name: "Enviar por correo" }).click();
     await dialog.getByRole("button", { name: "Publicar" }).click();
     await expect(page.getByText("Aviso publicado")).toBeVisible();
@@ -61,8 +80,13 @@ test.describe("Avisos institucionales", () => {
       page.getByRole("link", { name: new RegExp(`Aviso urgente: ${titulo}|\\d+ avisos urgentes`) }),
     ).toBeVisible();
     await page.goto("/estado-institucional");
-    const vigentes = page.locator("[data-slot=card]", { hasText: "Avisos vigentes" });
-    await expect(vigentes.getByText(titulo)).toBeVisible();
+    await expect(page.getByText("Historial", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: new RegExp(`Aviso urgente: ${titulo}|\\d+ avisos urgentes`) }),
+    ).toBeVisible();
+    const tarjetas = page.locator("[data-slot=card]");
+    await expect(tarjetas.filter({ hasText: "Avisos vigentes" })).toHaveCount(0);
+    await expect(tarjetas.filter({ hasText: titulo })).toHaveCount(0);
 
     await page.goto("/avisos");
     await page.getByRole("tab", { name: "Publicados" }).click();
@@ -113,7 +137,22 @@ test.describe("Avisos institucionales", () => {
     await expect(nuevo.getByRole("checkbox", { name: "Todos" })).toBeChecked();
     await nuevo.getByRole("button", { name: "Cancelar" }).click();
 
+    for (const ruta of ["/clases", "/novedades"]) {
+      await page.goto(ruta);
+      const indicador = page.getByRole("link", {
+        name: /Institución cerrada, Corte de energía, desde las/,
+      });
+      await expect(indicador).toBeVisible();
+      await expect(indicador.getByText("Corte de energía")).toBeVisible();
+      await expect(page.locator("[data-slot=alert]")).toHaveCount(0);
+    }
+
+    await page.setViewportSize({ width: 360, height: 740 });
     await page.goto("/estado-institucional");
+    await expect(page.locator("header [data-estado=CERRADA]")).toBeVisible();
+    await expectBadgeDentroDelEncabezado(page);
+    await page.setViewportSize({ width: 1280, height: 720 });
+
     await page.getByLabel("Nuevo estado").selectOption("ABIERTA");
     await page.getByRole("button", { name: "Cambiar estado" }).click();
     await expect(page.getByRole("link", { name: /Institución abierta/ })).toBeVisible();

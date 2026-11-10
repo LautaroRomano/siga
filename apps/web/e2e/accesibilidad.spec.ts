@@ -22,17 +22,17 @@ const perfiles = {
   Estudiante: { user: seededUsers.estudiante, inicio: "Mis clases de hoy" },
   Docente: { user: seededUsers.docente, inicio: "Mis clases de hoy" },
   Bedel: { user: seededUsers.bedel, inicio: "Estado institucional" },
-  Autoridad: { user: seededUsers.autoridad, inicio: "Clases de hoy" },
+  Autoridad: { user: seededUsers.autoridad, inicio: "Clases" },
 } satisfies Record<string, { user: User; inicio: string }>;
 
-const rutasComunes = ["/", "/mi-perfil", "/avisos", "/clases"];
+const rutasComunes = ["/", "/mi-cuenta", "/mi-cuenta/notificaciones", "/avisos", "/clases"];
 const rutasPorPerfil: Record<keyof typeof perfiles, string[]> = {
-  Estudiante: ["/preferencias"],
-  Docente: ["/asistencia", "/novedades", "/aulas"],
+  Estudiante: ["/mi-cuenta/comisiones", "/aulas?vista=plano"],
+  Docente: ["/asistencia", "/novedades", "/solicitudes"],
   Bedel: [
     "/novedades",
     "/aulas",
-    "/plano-de-aulas",
+    "/aulas?vista=plano",
     "/qr",
     "/solicitudes",
     "/incidencias",
@@ -40,7 +40,14 @@ const rutasPorPerfil: Record<keyof typeof perfiles, string[]> = {
     "/datos-academicos",
     "/configuracion",
   ],
-  Autoridad: ["/historico", "/plano-de-aulas", "/usuarios", "/datos-academicos"],
+  Autoridad: [
+    "/novedades",
+    "/incidencias",
+    "/historico",
+    "/aulas",
+    "/usuarios",
+    "/datos-academicos",
+  ],
 };
 
 const esperarPantalla = async (page: Page) => {
@@ -82,7 +89,7 @@ test.describe("Accesibilidad por perfil", () => {
       await loginViaUi(page, user);
       const rutas = [
         "/",
-        "/mi-perfil",
+        "/mi-cuenta",
         "/avisos",
         ...rutasPorPerfil[perfil as keyof typeof perfiles],
       ];
@@ -110,6 +117,7 @@ test.describe("Teclado", () => {
     page,
   }) => {
     await page.goto("/login");
+    await expect(page.locator("button[type=submit]")).toBeVisible();
     const visitados: string[] = [];
     let ultimoY = -1;
     for (let paso = 0; paso < 12; paso++) {
@@ -138,7 +146,8 @@ test.describe("Teclado", () => {
     }) => {
       test.skip(isMobile, "El menú móvil se prueba con la barra lateral");
       await loginViaUi(page, user);
-      await expect(page.getByRole("heading", { name: inicio })).toBeVisible();
+      await expect(page.getByRole("heading", { name: inicio, exact: true })).toBeVisible();
+      if (perfil === "Autoridad") await expect(page).toHaveURL(/\/clases$/);
       await page.locator('[data-sidebar="sidebar"] a').first().focus();
       let enfocados = 0;
       for (let paso = 0; paso < 12; paso++) {
@@ -167,15 +176,15 @@ test.describe("Teclado", () => {
     await expect(abrir).toBeFocused();
   });
 
-  test("Escape cierra las Novedades de Configuración y devuelve el foco al botón", async ({
+  test("Escape cierra Qué hay de nuevo de Configuración y devuelve el foco al botón", async ({
     page,
   }) => {
     await loginViaUi(page, seededUsers.bedel);
     await page.goto("/configuracion");
-    const abrir = page.getByRole("button", { name: "Novedades" });
+    const abrir = page.getByRole("button", { name: "Qué hay de nuevo" });
     await abrir.focus();
     await page.keyboard.press("Enter");
-    const dialogo = page.getByRole("dialog", { name: "Novedades" });
+    const dialogo = page.getByRole("dialog", { name: "Qué hay de nuevo" });
     await expect(dialogo).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialogo).toBeHidden();
@@ -241,7 +250,7 @@ test.describe("Contraste de estados y foco", () => {
       await page.emulateMedia({ colorScheme: tema });
       await loginViaUi(page, seededUsers.bedel);
       const hallazgos: string[] = [];
-      for (const ruta of ["/estado-institucional", "/novedades", "/configuracion", "/mi-perfil"]) {
+      for (const ruta of ["/estado-institucional", "/novedades", "/configuracion", "/mi-cuenta"]) {
         await page.goto(ruta);
         await esperarPantalla(page);
         for (const h of await medirFoco(page)) hallazgos.push(`${ruta} ${h.selector} ${h.detalle}`);
@@ -268,8 +277,6 @@ test.describe("360 px", () => {
         ...rutasComunes,
         ...rutasPorPerfil[perfil as keyof typeof perfiles],
         "/estado-institucional",
-        "/aulas/solicitar",
-        "/aulas/mis-solicitudes",
       ];
       for (const ruta of rutas) {
         await page.goto(ruta);

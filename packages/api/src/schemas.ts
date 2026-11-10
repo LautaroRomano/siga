@@ -478,7 +478,11 @@ export const aulasGestionQuerySchema = z.object({
 
 export const buscarAulasQuerySchema = z.object({
   claseId: z.string().min(1),
-  alumnos: alumnosSolicitudSchema,
+  alumnos: z
+    .preprocess((valor) => (valor === "" ? undefined : valor), alumnosSolicitudSchema.optional())
+    .openapi({
+      description: "Entero mayor que 0. Obligatorio para el Docente; opcional para el Bedel",
+    }),
   recursos: z
     .string()
     .optional()
@@ -487,6 +491,19 @@ export const buscarAulasQuerySchema = z.object({
     .openapi({
       description: "Recursos requeridos separados por coma",
       example: "Proyector,Pizarra",
+    }),
+});
+
+export const listarSolicitudesAulaQuerySchema = z.object({
+  estado: z
+    .preprocess(
+      (value) => (typeof value === "string" ? value.split(",").filter(Boolean) : value),
+      z.array(estadoSolicitudAulaSchema).min(1),
+    )
+    .openapi({
+      description: "Estados separados por coma; la respuesta los agrupa en el orden del enum",
+      param: { style: "form", explode: false },
+      example: ["PENDIENTE", "ASIGNADA"],
     }),
 });
 
@@ -586,23 +603,6 @@ export const notificacionAvisoSchema = z
   .openapi("NotificacionAviso");
 export type NotificacionAvisoDto = z.infer<typeof notificacionAvisoSchema>;
 
-export const novedadHistoricaSchema = z
-  .object({
-    id: z.string(),
-    publicadaEn: z.string(),
-    tipo: tipoNovedadSchema,
-    estado: estadoNovedadSchema,
-    materia: z.string(),
-    comision: z.string(),
-    fechaClaseDesde: z.string().nullable(),
-    fechaClaseHasta: z.string().nullable(),
-    docentes: z.array(z.string()),
-    publicadaPor: z.string(),
-    publicadaPorBedelia: z.boolean(),
-  })
-  .openapi("NovedadHistorica");
-export type NovedadHistoricaDto = z.infer<typeof novedadHistoricaSchema>;
-
 export const consultaNovedadesResultadoSchema = z
   .object({
     total: z.number().int(),
@@ -616,7 +616,7 @@ export const consultaNovedadesResultadoSchema = z
     pagina: z.number().int(),
     tamanioPagina: z.number().int(),
     totalPaginas: z.number().int(),
-    novedades: z.array(novedadHistoricaSchema),
+    novedades: z.array(novedadSchema),
   })
   .openapi("ConsultaNovedadesResultado");
 export type ConsultaNovedadesResultadoDto = z.infer<typeof consultaNovedadesResultadoSchema>;
@@ -642,11 +642,6 @@ export type IncidenciaHistoricaDto = z.infer<typeof incidenciaHistoricaSchema>;
 export const consultaIncidenciasResultadoSchema = z
   .object({
     total: z.number().int(),
-    porEstado: z.object({
-      ABIERTA: z.number().int(),
-      EN_CURSO: z.number().int(),
-      RESUELTA: z.number().int(),
-    }),
     pagina: z.number().int(),
     tamanioPagina: z.number().int(),
     totalPaginas: z.number().int(),
@@ -843,6 +838,9 @@ export const usuarioSchema = z
       .array(z.object({ id: z.string(), codigo: z.string(), materia: z.string() }))
       .openapi({ description: "Comisiones que dicta (solo Docente)" }),
     esPropio: z.boolean().openapi({ description: "Es la cuenta de quien consulta" }),
+    esAdministrador: z
+      .boolean()
+      .openapi({ description: "Es el Administrador de la institución; no se puede desactivar" }),
     bajaSolicitada: z
       .object({ solicitadaEn: z.iso.datetime(), motivo: z.string().nullable() })
       .nullable()
@@ -860,9 +858,29 @@ export const dominiosPermitidosDtoSchema = z
   .openapi("DominiosPermitidos");
 export type DominiosPermitidosDto = z.infer<typeof dominiosPermitidosDtoSchema>;
 
+export const puntoPlanoSchema = z.object({ x: z.number(), y: z.number() }).openapi("PuntoPlano");
+
+export const poligonoAulaSchema = z.array(puntoPlanoSchema).openapi({
+  description: "De 3 a 24 puntos con coordenadas relativas a la imagen (0 a 1)",
+});
+
+export const planoImagenSchema = z
+  .object({
+    id: z.string(),
+    ancho: z.number().int(),
+    alto: z.number().int(),
+    imagenUrl: z.string().openapi({ description: "URL firmada de lectura, válida 1 hora" }),
+  })
+  .openapi("PlanoImagen");
+export type PlanoImagenDto = z.infer<typeof planoImagenSchema>;
+
 export const planoAulaSchema = aulaSchema
   .pick({ id: true, codigo: true, edificio: true, piso: true, capacidad: true })
   .extend({
+    plano: planoImagenSchema.nullable().openapi({ description: "Nulo si el aula no está ubicada" }),
+    poligono: poligonoAulaSchema.nullable().openapi({
+      description: "Nulo si el aula no está ubicada",
+    }),
     estadoAula: estadoAulaSchema,
     estado: estadoPlanoSchema,
     claseEnCurso: claseSchema.nullable(),
@@ -872,3 +890,64 @@ export const planoAulaSchema = aulaSchema
   })
   .openapi("PlanoAula");
 export type PlanoAulaDto = z.infer<typeof planoAulaSchema>;
+
+export const imagenPlanoSubidaSchema = z
+  .object({
+    key: z.string().openapi({ description: "Se envía como `key` al guardar el plano" }),
+    uploadUrl: z
+      .string()
+      .openapi({ description: "URL firmada para un PUT directo, válida 5 minutos" }),
+  })
+  .openapi("ImagenPlanoSubida");
+export type ImagenPlanoSubidaDto = z.infer<typeof imagenPlanoSubidaSchema>;
+
+export const planoPisoSchema = planoImagenSchema
+  .extend({
+    edificio: z.string(),
+    piso: z.string(),
+    aulasUbicadas: z.number().int(),
+  })
+  .openapi("PlanoPiso");
+export type PlanoPisoDto = z.infer<typeof planoPisoSchema>;
+
+export const aulaUbicadaSchema = z
+  .object({
+    id: z.string(),
+    codigo: z.string(),
+    capacidad: z.number().int(),
+    poligono: poligonoAulaSchema,
+  })
+  .openapi("AulaUbicada");
+
+export const planoPisoDetalleSchema = planoPisoSchema
+  .extend({ aulas: z.array(aulaUbicadaSchema) })
+  .openapi("PlanoPisoDetalle");
+export type PlanoPisoDetalleDto = z.infer<typeof planoPisoDetalleSchema>;
+
+const aulaImportadaSchema = z.object({ id: z.string(), codigo: z.string() });
+
+export const importacionPlanoSchema = z
+  .object({
+    creadas: z.array(aulaImportadaSchema),
+    ubicadas: z.array(aulaImportadaSchema).openapi({
+      description: "Aulas existentes del piso que recibieron o reemplazaron su polígono",
+    }),
+  })
+  .openapi("ImportacionPlano");
+export type ImportacionPlanoDto = z.infer<typeof importacionPlanoSchema>;
+
+export const deteccionAulasDtoSchema = z
+  .object({
+    aulas: z.array(
+      z.object({
+        nombre: z
+          .string()
+          .nullable()
+          .openapi({ description: "Nulo si el recinto no tiene rótulo" }),
+        confianza: z.number().openapi({ description: "De 0 a 1" }),
+        poligono: poligonoAulaSchema,
+      }),
+    ),
+  })
+  .openapi("DeteccionAulas");
+export type DeteccionAulasDto = z.infer<typeof deteccionAulasDtoSchema>;

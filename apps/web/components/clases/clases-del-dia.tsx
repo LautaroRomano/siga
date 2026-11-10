@@ -5,12 +5,11 @@ import type { AmbitoClases } from "@repo/domain";
 import type { ReactNode } from "react";
 
 import { useClases } from "@/hooks/use-clases";
-import { useEstadoInstitucional } from "@/hooks/use-estado-institucional";
 import { formatFechaLarga } from "@/lib/dates";
 
-import { CierreBanner, ClasesEmpty, ClasesList } from "./clases-list";
+import { ClasesEmpty, ClasesList } from "./clases-list";
 
-// Clases de hoy para docente ("mias"), bedel y autoridad ("todas").
+// Clases de hoy del docente (ámbito "mias").
 export function ClasesDelDia({
   ambito,
   emptyTitle,
@@ -23,13 +22,11 @@ export function ClasesDelDia({
   children?: ReactNode;
 }) {
   const clases = useClases({ ambito });
-  const estado = useEstadoInstitucional();
 
   return (
     <div className="flex flex-col gap-4">
-      <CierreBanner estado={estado.data} />
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="font-medium capitalize">
+        <h2 className="font-medium">
           {clases.data ? `Hoy · ${formatFechaLarga(clases.data.fecha)}` : "Hoy"}
         </h2>
         {clases.data ? (

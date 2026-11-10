@@ -3,7 +3,7 @@
   "info": {
     "title": "SiGA API",
     "version": "1.0.0",
-    "description": "Sesión y perfil, estado institucional, clases programadas, novedades, avisos institucionales, preferencias del estudiante, datos académicos base, aulas, solicitudes de aula, asistencia docente, incidencias de infraestructura y gestión de usuarios y perfiles. Autenticación por cookie (web) o bearer token (móvil)."
+    "description": "Sesión y perfil, estado institucional, clases programadas, novedades, avisos institucionales, preferencias del estudiante, datos académicos base, aulas, solicitudes de aula, asistencia docente, incidencias de infraestructura, planos de pisos y gestión de usuarios y perfiles. Autenticación por cookie (web) o bearer token (móvil)."
   },
   "security": [
     {
@@ -437,6 +437,10 @@
             "type": "boolean",
             "description": "Es la cuenta de quien consulta"
           },
+          "esAdministrador": {
+            "type": "boolean",
+            "description": "Es el Administrador de la institución; no se puede desactivar"
+          },
           "bajaSolicitada": {
             "type": [
               "object",
@@ -471,6 +475,7 @@
           "estado",
           "comisiones",
           "esPropio",
+          "esAdministrador",
           "bajaSolicitada"
         ]
       },
@@ -1301,7 +1306,7 @@
           "novedades": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/NovedadHistorica"
+              "$ref": "#/components/schemas/Novedad"
             }
           }
         },
@@ -1312,77 +1317,6 @@
           "tamanioPagina",
           "totalPaginas",
           "novedades"
-        ]
-      },
-      "NovedadHistorica": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "publicadaEn": {
-            "type": "string"
-          },
-          "tipo": {
-            "type": "string",
-            "enum": [
-              "AUSENCIA",
-              "DEMORA",
-              "VIRTUAL",
-              "SUSPENSION",
-              "CAMBIO_AULA"
-            ]
-          },
-          "estado": {
-            "type": "string",
-            "enum": [
-              "ACTIVA",
-              "FINALIZADA"
-            ]
-          },
-          "materia": {
-            "type": "string"
-          },
-          "comision": {
-            "type": "string"
-          },
-          "fechaClaseDesde": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "fechaClaseHasta": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "docentes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "publicadaPor": {
-            "type": "string"
-          },
-          "publicadaPorBedelia": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "publicadaEn",
-          "tipo",
-          "estado",
-          "materia",
-          "comision",
-          "fechaClaseDesde",
-          "fechaClaseHasta",
-          "docentes",
-          "publicadaPor",
-          "publicadaPorBedelia"
         ]
       },
       "ConsultaAsistenciasResultado": {
@@ -1656,163 +1590,6 @@
           "horaInicioClase",
           "horaFinClase",
           "origen",
-          "usuario"
-        ]
-      },
-      "ConsultaIncidenciasResultado": {
-        "type": "object",
-        "properties": {
-          "total": {
-            "type": "integer"
-          },
-          "porEstado": {
-            "type": "object",
-            "properties": {
-              "ABIERTA": {
-                "type": "integer"
-              },
-              "EN_CURSO": {
-                "type": "integer"
-              },
-              "RESUELTA": {
-                "type": "integer"
-              }
-            },
-            "required": [
-              "ABIERTA",
-              "EN_CURSO",
-              "RESUELTA"
-            ]
-          },
-          "pagina": {
-            "type": "integer"
-          },
-          "tamanioPagina": {
-            "type": "integer"
-          },
-          "totalPaginas": {
-            "type": "integer"
-          },
-          "incidencias": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/IncidenciaHistorica"
-            }
-          }
-        },
-        "required": [
-          "total",
-          "porEstado",
-          "pagina",
-          "tamanioPagina",
-          "totalPaginas",
-          "incidencias"
-        ]
-      },
-      "IncidenciaHistorica": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "reportadaEn": {
-            "type": "string"
-          },
-          "aula": {
-            "type": "string"
-          },
-          "elemento": {
-            "type": "string",
-            "enum": [
-              "PROYECTOR",
-              "CLIMATIZACION",
-              "ILUMINACION",
-              "MOBILIARIO",
-              "CONECTIVIDAD",
-              "OTRO"
-            ]
-          },
-          "gravedad": {
-            "type": "string",
-            "enum": [
-              "LEVE",
-              "IMPIDE_USO"
-            ]
-          },
-          "estado": {
-            "type": "string",
-            "enum": [
-              "ABIERTA",
-              "EN_CURSO",
-              "RESUELTA"
-            ]
-          },
-          "descripcion": {
-            "type": "string"
-          },
-          "reportadaPor": {
-            "type": "string"
-          },
-          "historial": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/IncidenciaEstado"
-            },
-            "description": "Cada estado con fecha, hora, usuario y observaciones, del más antiguo al más nuevo"
-          }
-        },
-        "required": [
-          "id",
-          "reportadaEn",
-          "aula",
-          "elemento",
-          "gravedad",
-          "estado",
-          "descripcion",
-          "reportadaPor",
-          "historial"
-        ]
-      },
-      "IncidenciaEstado": {
-        "type": "object",
-        "properties": {
-          "estado": {
-            "type": "string",
-            "enum": [
-              "ABIERTA",
-              "EN_CURSO",
-              "RESUELTA"
-            ]
-          },
-          "observaciones": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "usuario": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "nombre": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "nombre"
-            ]
-          }
-        },
-        "required": [
-          "estado",
-          "observaciones",
-          "createdAt",
           "usuario"
         ]
       },
@@ -2422,6 +2199,19 @@
           "capacidad": {
             "type": "integer"
           },
+          "plano": {
+            "$ref": "#/components/schemas/PlanoImagen"
+          },
+          "poligono": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PuntoPlano"
+            },
+            "description": "Nulo si el aula no está ubicada"
+          },
           "estadoAula": {
             "type": "string",
             "enum": [
@@ -2474,10 +2264,55 @@
           "edificio",
           "piso",
           "capacidad",
+          "plano",
+          "poligono",
           "estadoAula",
           "estado",
           "claseEnCurso",
           "proximaClase"
+        ]
+      },
+      "PlanoImagen": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ancho": {
+            "type": "integer"
+          },
+          "alto": {
+            "type": "integer"
+          },
+          "imagenUrl": {
+            "type": "string",
+            "description": "URL firmada de lectura, válida 1 hora"
+          }
+        },
+        "required": [
+          "id",
+          "ancho",
+          "alto",
+          "imagenUrl"
+        ],
+        "description": "Nulo si el aula no está ubicada"
+      },
+      "PuntoPlano": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
         ]
       },
       "ReemplazoAula": {
@@ -2963,6 +2798,143 @@
           "uploadUrl"
         ]
       },
+      "ConsultaIncidenciasResultado": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "pagina": {
+            "type": "integer"
+          },
+          "tamanioPagina": {
+            "type": "integer"
+          },
+          "totalPaginas": {
+            "type": "integer"
+          },
+          "incidencias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IncidenciaHistorica"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "pagina",
+          "tamanioPagina",
+          "totalPaginas",
+          "incidencias"
+        ]
+      },
+      "IncidenciaHistorica": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "reportadaEn": {
+            "type": "string"
+          },
+          "aula": {
+            "type": "string"
+          },
+          "elemento": {
+            "type": "string",
+            "enum": [
+              "PROYECTOR",
+              "CLIMATIZACION",
+              "ILUMINACION",
+              "MOBILIARIO",
+              "CONECTIVIDAD",
+              "OTRO"
+            ]
+          },
+          "gravedad": {
+            "type": "string",
+            "enum": [
+              "LEVE",
+              "IMPIDE_USO"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ABIERTA",
+              "EN_CURSO",
+              "RESUELTA"
+            ]
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "reportadaPor": {
+            "type": "string"
+          },
+          "historial": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IncidenciaEstado"
+            },
+            "description": "Cada estado con fecha, hora, usuario y observaciones, del más antiguo al más nuevo"
+          }
+        },
+        "required": [
+          "id",
+          "reportadaEn",
+          "aula",
+          "elemento",
+          "gravedad",
+          "estado",
+          "descripcion",
+          "reportadaPor",
+          "historial"
+        ]
+      },
+      "IncidenciaEstado": {
+        "type": "object",
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ABIERTA",
+              "EN_CURSO",
+              "RESUELTA"
+            ]
+          },
+          "observaciones": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "usuario": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "nombre": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "nombre"
+            ]
+          }
+        },
+        "required": [
+          "estado",
+          "observaciones",
+          "createdAt",
+          "usuario"
+        ]
+      },
       "IncidenciaDetalle": {
         "allOf": [
           {
@@ -2991,6 +2963,182 @@
               "historial"
             ]
           }
+        ]
+      },
+      "ImagenPlanoSubida": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Se envía como `key` al guardar el plano"
+          },
+          "uploadUrl": {
+            "type": "string",
+            "description": "URL firmada para un PUT directo, válida 5 minutos"
+          }
+        },
+        "required": [
+          "key",
+          "uploadUrl"
+        ]
+      },
+      "PlanoPiso": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PlanoImagen"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "edificio": {
+                "type": "string"
+              },
+              "piso": {
+                "type": "string"
+              },
+              "aulasUbicadas": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "edificio",
+              "piso",
+              "aulasUbicadas"
+            ]
+          }
+        ]
+      },
+      "PlanoPisoDetalle": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PlanoPiso"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "aulas": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AulaUbicada"
+                }
+              }
+            },
+            "required": [
+              "aulas"
+            ]
+          }
+        ]
+      },
+      "AulaUbicada": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "capacidad": {
+            "type": "integer"
+          },
+          "poligono": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PuntoPlano"
+            },
+            "description": "De 3 a 24 puntos con coordenadas relativas a la imagen (0 a 1)"
+          }
+        },
+        "required": [
+          "id",
+          "codigo",
+          "capacidad",
+          "poligono"
+        ]
+      },
+      "ImportacionPlano": {
+        "type": "object",
+        "properties": {
+          "creadas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "codigo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "codigo"
+              ]
+            }
+          },
+          "ubicadas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "codigo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "codigo"
+              ]
+            },
+            "description": "Aulas existentes del piso que recibieron o reemplazaron su polígono"
+          }
+        },
+        "required": [
+          "creadas",
+          "ubicadas"
+        ]
+      },
+      "DeteccionAulas": {
+        "type": "object",
+        "properties": {
+          "aulas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Nulo si el recinto no tiene rótulo"
+                },
+                "confianza": {
+                  "type": "number",
+                  "description": "De 0 a 1"
+                },
+                "poligono": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PuntoPlano"
+                  },
+                  "description": "De 3 a 24 puntos con coordenadas relativas a la imagen (0 a 1)"
+                }
+              },
+              "required": [
+                "nombre",
+                "confianza",
+                "poligono"
+              ]
+            }
+          }
+        },
+        "required": [
+          "aulas"
         ]
       },
       "SesionQr": {
@@ -6054,22 +6202,8 @@
         "tags": [
           "Novedades"
         ],
-        "summary": "Novedades publicadas, la más reciente primero",
-        "description": "El docente ve las de sus comisiones; bedel y autoridad, todas.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "ACTIVA",
-                "FINALIZADA"
-              ]
-            },
-            "required": false,
-            "name": "estado",
-            "in": "query"
-          }
-        ],
+        "summary": "Novedades activas, la más reciente primero",
+        "description": "Pestaña Activas: no finalizadas con alguna clase futura o en curso (Ausencia y Suspensión no se finalizan: salen cuando pasan sus clases). El docente ve las de sus comisiones; bedel y autoridad, todas. Sin paginar.",
         "responses": {
           "200": {
             "description": "Novedades",
@@ -6214,6 +6348,140 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Novedad"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permiso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error de validación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/novedades/historial": {
+      "get": {
+        "tags": [
+          "Novedades"
+        ],
+        "summary": "Historial de novedades en un rango de fechas, con cantidad por tipo",
+        "description": "Solo lectura (sin `perfilOnly`: el servicio rechaza y audita el 403, SEG-6). Novedades finalizadas o sin clases por delante. `desde` y `hasta` son obligatorios (yyyy-mm-dd, hora argentina, inclusivos, hasta 12 meses) y filtran por fecha de publicación; `tipo` es opcional. El total y la cantidad por tipo cuentan todo el período filtrado; el detalle pagina de a 20, la más reciente primero. El docente ve las de sus comisiones; bedel y autoridad, todas.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "desde",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "hasta",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "AUSENCIA",
+                    "DEMORA",
+                    "VIRTUAL",
+                    "SUSPENSION",
+                    "CAMBIO_AULA"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    ""
+                  ]
+                }
+              ]
+            },
+            "required": false,
+            "name": "tipo",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "required": false,
+            "name": "pagina",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Total, cantidad por tipo y detalle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultaNovedadesResultado"
                 }
               }
             }
@@ -6429,180 +6697,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Novedad"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Solicitud inválida",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin permiso",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflicto",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Error de validación",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/historico/novedades": {
-      "get": {
-        "tags": [
-          "Consultas históricas"
-        ],
-        "summary": "Novedades publicadas en un rango de fechas, con indicadores por tipo",
-        "description": "Solo Autoridad académica. `desde` y `hasta` son obligatorios (yyyy-mm-dd, hora argentina, inclusivos, hasta 12 meses) y filtran por fecha de publicación; los filtros opcionales se combinan. Los indicadores cuentan todo el período filtrado; el detalle pagina de a 20, la más reciente primero.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "desde",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "hasta",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "carreraId",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "materiaId",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "comisionId",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "docenteId",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "aulaId",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1
-            },
-            "required": false,
-            "name": "pagina",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": [
-                    "AUSENCIA",
-                    "DEMORA",
-                    "VIRTUAL",
-                    "SUSPENSION",
-                    "CAMBIO_AULA"
-                  ]
-                },
-                {
-                  "type": "string",
-                  "enum": [
-                    ""
-                  ]
-                }
-              ]
-            },
-            "required": false,
-            "name": "tipo",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Indicadores y detalle",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConsultaNovedadesResultado"
                 }
               }
             }
@@ -6926,123 +7020,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConsultaUsoAulasResultado"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Solicitud inválida",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin permiso",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflicto",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Error de validación",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/historico/incidencias": {
-      "get": {
-        "tags": [
-          "Consultas históricas"
-        ],
-        "summary": "Incidencias de aulas reportadas en un rango de fechas, con indicadores por estado",
-        "description": "Autoridad académica y Bedel. `desde` y `hasta` son obligatorios (yyyy-mm-dd, hora argentina, inclusivos, hasta 12 meses) y filtran por la fecha del reporte; `aulaId` es opcional. Los indicadores cuentan todo el período filtrado por estado actual; el detalle pagina de a 20, la más reciente primero, e incluye el historial de estados de solo lectura.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "desde",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "hasta",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "aulaId",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1
-            },
-            "required": false,
-            "name": "pagina",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Indicadores y detalle",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConsultaIncidenciasResultado"
                 }
               }
             }
@@ -7665,10 +7642,7 @@
                   "notificarAvisosPorCorreo": {
                     "type": "boolean"
                   }
-                },
-                "required": [
-                  "comisionIds"
-                ]
+                }
               }
             }
           }
@@ -12691,7 +12665,7 @@
           "Solicitudes de aula"
         ],
         "summary": "Clases para las que se puede solicitar aula",
-        "description": "Docente: las de sus comisiones; Bedel: todas. Excluye las terminadas y las Virtuales, Suspendidas, Ausentes o Finalizadas.",
+        "description": "Solo Docente: las de sus comisiones. Excluye las terminadas y las Virtuales, Suspendidas, Ausentes o Finalizadas.",
         "parameters": [
           {
             "schema": {
@@ -12785,7 +12759,7 @@
           "Solicitudes de aula"
         ],
         "summary": "Aulas para una clase según alumnos y recursos",
-        "description": "Activas, Disponibles, libres en la franja de la clase y con capacidad y recursos suficientes, de menor a mayor capacidad. Sin coincidencias devuelve hasta 5 `sugerencias` con el criterio que falla. 422 si `alumnos` no es un entero mayor que 0.",
+        "description": "Activas, Disponibles, libres en la franja de la clase y con capacidad y recursos suficientes, de menor a mayor capacidad. Sin coincidencias devuelve hasta 5 `sugerencias` con los criterios que fallan. `alumnos` es opcional para el Bedel (sin filtros devuelve todas las libres) y obligatorio para el Docente; 422 si no es un entero mayor que 0.",
         "parameters": [
           {
             "schema": {
@@ -12799,9 +12773,11 @@
           {
             "schema": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "description": "Entero mayor que 0. Obligatorio para el Docente; opcional para el Bedel"
             },
-            "required": true,
+            "required": false,
+            "description": "Entero mayor que 0. Obligatorio para el Docente; opcional para el Bedel",
             "name": "alumnos",
             "in": "query"
           },
@@ -12897,6 +12873,7 @@
           "Solicitudes de aula"
         ],
         "summary": "Mis solicitudes de aula, las más recientes primero",
+        "description": "Solo Docente.",
         "responses": {
           "200": {
             "description": "Solicitudes",
@@ -12980,7 +12957,7 @@
           "Solicitudes de aula"
         ],
         "summary": "Solicitar un aula para una clase",
-        "description": "Queda Pendiente (no reserva el aula). Si la clase no tiene aula y empieza en menos de 30 minutos o ya empezó, nace Asignada y el aula pasa a la clase. 409 si el aula ya está asignada en esa franja o la clase ya tiene una solicitud pendiente.",
+        "description": "Solo Docente. Queda Pendiente (no reserva el aula). Si la clase no tiene aula y empieza en menos de 30 minutos o ya empezó, nace Asignada y el aula pasa a la clase. 409 si el aula ya está asignada en esa franja o la clase ya tiene una solicitud pendiente.",
         "requestBody": {
           "required": true,
           "content": {
@@ -13110,20 +13087,32 @@
         "tags": [
           "Solicitudes de aula"
         ],
-        "summary": "Solicitudes de aula de un estado (Bedel)",
-        "description": "Solo Bedel. Pendientes y Asignadas (inmediatas) por franja más próxima; Aprobadas y Rechazadas, las resueltas más recientes primero.",
+        "summary": "Solicitudes de aula por estado (Bedel)",
+        "description": "Solo Bedel. `estado` admite varios valores separados por coma; la respuesta los agrupa en el orden Pendiente, Asignada, Aprobada, Rechazada. Dentro de cada grupo, Pendientes y Asignadas (inmediatas) por franja más próxima; Aprobadas y Rechazadas, las resueltas más recientes primero.",
         "parameters": [
           {
             "schema": {
-              "type": "string",
-              "enum": [
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PENDIENTE",
+                  "ASIGNADA",
+                  "APROBADA",
+                  "RECHAZADA"
+                ]
+              },
+              "minItems": 1,
+              "description": "Estados separados por coma; la respuesta los agrupa en el orden del enum",
+              "example": [
                 "PENDIENTE",
-                "ASIGNADA",
-                "APROBADA",
-                "RECHAZADA"
+                "ASIGNADA"
               ]
             },
             "required": true,
+            "description": "Estados separados por coma; la respuesta los agrupa en el orden del enum",
+            "style": "form",
+            "explode": false,
             "name": "estado",
             "in": "query"
           }
@@ -13788,18 +13777,8 @@
         "tags": [
           "Incidencias"
         ],
-        "summary": "Incidencias por estado, las más recientes primero",
-        "description": "Solo Bedel. `estados` separados por coma; sin él, Abiertas y En curso.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "estados",
-            "in": "query"
-          }
-        ],
+        "summary": "Incidencias abiertas, las más recientes primero",
+        "description": "Pestaña Abiertas: Abierta y En curso, sin filtro de estado ni paginación. Bedel y Autoridad académica (solo lectura).",
         "responses": {
           "200": {
             "description": "Incidencias",
@@ -13877,13 +13856,130 @@
         }
       }
     },
+    "/api/v1/incidencias/historial": {
+      "get": {
+        "tags": [
+          "Incidencias"
+        ],
+        "summary": "Historial de incidencias resueltas en un rango de fechas",
+        "description": "Solo lectura, Bedel y Autoridad académica. Solo Resueltas. `desde` y `hasta` son obligatorios (yyyy-mm-dd, hora argentina, inclusivos, hasta 12 meses) y filtran por la fecha del reporte; `aulaId` es opcional. El total cuenta todo el período filtrado; el detalle pagina de a 20, la más reciente primero, e incluye el historial de estados.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "desde",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "hasta",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "aulaId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "required": false,
+            "name": "pagina",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Total y detalle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultaIncidenciasResultado"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permiso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error de validación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/incidencias/{id}": {
       "get": {
         "tags": [
           "Incidencias"
         ],
         "summary": "Detalle de una incidencia con foto e historial",
-        "description": "Solo Bedel. `fotoUrl` es una URL firmada de lectura.",
+        "description": "Bedel y Autoridad académica. `fotoUrl` es una URL firmada de lectura.",
         "parameters": [
           {
             "schema": {
@@ -14082,6 +14178,690 @@
           },
           "422": {
             "description": "Error de validación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/planos/imagen": {
+      "post": {
+        "tags": [
+          "Planos"
+        ],
+        "summary": "URL firmada para subir la imagen del plano de un piso",
+        "description": "Solo Bedel. Body `{ contentType, size }` (JPG o PNG, hasta 4 MB). El cliente hace un PUT directo a `uploadUrl` y envía `key` al guardar el plano. 503 si el almacenamiento (`STORAGE_*`) no está configurado.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contentType": {
+                    "type": "string",
+                    "enum": [
+                      "image/jpeg",
+                      "image/png"
+                    ]
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4194304
+                  }
+                },
+                "required": [
+                  "contentType",
+                  "size"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "URL de subida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImagenPlanoSubida"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permiso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error de validación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/planos": {
+      "post": {
+        "tags": [
+          "Planos"
+        ],
+        "summary": "Guardar o reemplazar el plano de un edificio y piso",
+        "description": "Solo Bedel. Responde 201 si crea el plano y 200 si reemplaza el de ese edificio y piso: la imagen anterior se borra y las aulas ubicadas conservan su polígono. `imagenUrl` es una URL firmada de lectura. 422 si la imagen no está subida o no es JPG o PNG de hasta 4 MB.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "edificio": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "piso": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "key": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "ancho": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "alto": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "edificio",
+                  "piso",
+                  "key",
+                  "ancho",
+                  "alto"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plano reemplazado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanoPiso"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Plano creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanoPiso"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permiso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error de validación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Planos"
+        ],
+        "summary": "Planos de los pisos",
+        "description": "Solo Bedel. Ordenados por edificio y piso, con la cantidad de aulas ubicadas.",
+        "responses": {
+          "200": {
+            "description": "Planos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlanoPiso"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permiso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error de validación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/planos/{id}": {
+      "get": {
+        "tags": [
+          "Planos"
+        ],
+        "summary": "Plano de un piso con sus aulas ubicadas",
+        "description": "Solo Bedel. Cada aula trae su polígono.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plano",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanoPisoDetalle"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permiso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error de validación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/planos/{id}/aulas": {
+      "post": {
+        "tags": [
+          "Planos"
+        ],
+        "summary": "Importar en lote las aulas de un plano",
+        "description": "Solo Bedel. Todo o nada. Un código nuevo crea el aula Disponible, sin equipamiento, en el edificio y piso del plano, con su capacidad o `capacidadPorDefecto`. Un código activo del mismo piso solo se ubica: toma el polígono nuevo y conserva su capacidad. 409 nombrando el código si es de otro edificio o piso o está dado de baja; 422 ante polígonos inválidos o códigos repetidos. Queda en auditoría como cambio masivo.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "capacidadPorDefecto": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500
+                  },
+                  "aulas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "codigo": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        "poligono": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "y": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y"
+                            ]
+                          },
+                          "minItems": 3,
+                          "maxItems": 24
+                        },
+                        "capacidad": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 500
+                        }
+                      },
+                      "required": [
+                        "codigo",
+                        "poligono"
+                      ]
+                    },
+                    "minItems": 1
+                  }
+                },
+                "required": [
+                  "capacidadPorDefecto",
+                  "aulas"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Aulas importadas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportacionPlano"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permiso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error de validación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/planos/{id}/deteccion": {
+      "post": {
+        "tags": [
+          "Planos"
+        ],
+        "summary": "Detectar las aulas del plano guardado con IA",
+        "description": "Solo Bedel. Envía la imagen guardada del plano a Claude (Anthropic) y devuelve los recintos de dictado con `nombre` (nulo si no tiene rótulo), `confianza` (0 a 1) y `poligono`; no crea nada. El modelo se elige con `DETECCION_AULAS_MODELO` (haiku, sonnet u opus). 503 sin `ANTHROPIC_API_KEY` o sin almacenamiento; 502 si el proveedor falla o responde algo inválido.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aulas detectadas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeteccionAulas"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permiso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error de validación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Falló el proveedor de detección",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Detección o almacenamiento no configurados",
             "content": {
               "application/json": {
                 "schema": {

@@ -2,6 +2,25 @@
   "releases": [
     {
       "stage": "Alpha",
+      "number": "0.2",
+      "date": "2026-11-10",
+      "changes": [
+        "Ahora podés importar las aulas de un piso desde su plano: se detectan solas y las revisás antes de confirmar",
+        "Aulas reúne lista y plano en una sección; el plano muestra cada piso apilado, con su imagen real y zoom",
+        "El menú de Bedel y Autoridad se agrupa en secciones, y Clases reemplaza a Buscar y Clases de hoy",
+        "Asistencia docente reemplaza a QR de asistencia, con el registro manual a la vista y el turno ya elegido",
+        "Ahora el docente pide aula desde un diálogo en Solicitudes, y el bedel ve arriba las clases sin aula",
+        "Novedades e Incidencias suman la pestaña Historial, con filtros por fecha, y salen de Consultas históricas",
+        "Mi cuenta reúne perfil, comisiones y notificaciones, y los cambios de comisiones y correos se guardan al momento",
+        "El indicador del encabezado muestra el motivo del cierre y desde cuándo rige el estado institucional",
+        "En Mis clases del docente, las acciones de cada clase pasan a un menú ⋯ que explica cuándo no están disponibles",
+        "Si la cámara no funciona, Registrar asistencia te guía para escanear desde el celular y te deja reintentar",
+        "Se publicó la política de privacidad definitiva, que vas a tener que aceptar para seguir usando SiGA",
+        "Se corrigieron pestañas, filtros y tarjetas que se cortaban, y el diálogo de Nueva solicitud que no se cerraba"
+      ]
+    },
+    {
+      "stage": "Alpha",
       "number": "0.1",
       "date": "2026-10-29",
       "changes": [

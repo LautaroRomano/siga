@@ -28,7 +28,7 @@ export const verificarCorreo = (email: string) =>
 export const aceptarPolitica = (email: string) =>
   runSql(`
     INSERT INTO aceptacion_politica ("id", "userId", "version")
-    SELECT 'e2e-' || u.id, u.id, 1 FROM "user" u WHERE u.email = '${email}'
+    SELECT 'e2e-' || u.id, u.id, 2 FROM "user" u WHERE u.email = '${email}'
     ON CONFLICT DO NOTHING;
   `);
 
@@ -82,3 +82,12 @@ export const crearClaseDeAsistenciaHoy = () => {
   `);
   return fecha;
 };
+
+export const diasNoLaborablesCargados = () =>
+  readSql(`SELECT to_char(fecha, 'YYYY-MM-DD') || '|' || activo FROM dia_no_laborable;`)
+    .split("\n")
+    .filter(Boolean)
+    .map((linea) => {
+      const [fecha, activo] = linea.split("|");
+      return { fecha, activo: activo === "true" };
+    });

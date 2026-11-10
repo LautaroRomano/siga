@@ -2,7 +2,6 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import {
   crearSolicitudAulaSchema,
   elegirAulaSchema,
-  listarSolicitudesAulaQuerySchema,
   rechazarSolicitudAulaSchema,
 } from "@repo/domain";
 
@@ -14,6 +13,7 @@ import {
   clasesDelDiaSchema,
   clasesSolicitablesQuerySchema,
   idParamSchema,
+  listarSolicitudesAulaQuerySchema,
   solicitudAulaSchema,
 } from "../schemas";
 import * as asignacion from "../services/asignacion-aulas";
@@ -23,6 +23,7 @@ import { commonErrors, jsonBody, jsonResponse } from "./shared";
 
 const tags = ["Solicitudes de aula"];
 const solicitantes = perfilOnly("DOCENTE", "BEDEL");
+const soloDocente = perfilOnly("DOCENTE");
 const soloBedel = perfilOnly("BEDEL");
 
 export const solicitudAulaRoutes = new OpenAPIHono<ApiEnv>()
@@ -33,9 +34,9 @@ export const solicitudAulaRoutes = new OpenAPIHono<ApiEnv>()
       tags,
       summary: "Clases para las que se puede solicitar aula",
       description:
-        "Docente: las de sus comisiones; Bedel: todas. Excluye las terminadas y las Virtuales, Suspendidas, Ausentes o Finalizadas.",
+        "Solo Docente: las de sus comisiones. Excluye las terminadas y las Virtuales, Suspendidas, Ausentes o Finalizadas.",
       request: { query: clasesSolicitablesQuerySchema },
-      middleware: [solicitantes] as const,
+      middleware: [soloDocente] as const,
       responses: { 200: jsonResponse(clasesDelDiaSchema, "Clases del día"), ...commonErrors },
     }),
     async (c) =>
@@ -51,7 +52,7 @@ export const solicitudAulaRoutes = new OpenAPIHono<ApiEnv>()
       tags,
       summary: "Aulas para una clase según alumnos y recursos",
       description:
-        "Activas, Disponibles, libres en la franja de la clase y con capacidad y recursos suficientes, de menor a mayor capacidad. Sin coincidencias devuelve hasta 5 `sugerencias` con el criterio que falla. 422 si `alumnos` no es un entero mayor que 0.",
+        "Activas, Disponibles, libres en la franja de la clase y con capacidad y recursos suficientes, de menor a mayor capacidad. Sin coincidencias devuelve hasta 5 `sugerencias` con los criterios que fallan. `alumnos` es opcional para el Bedel (sin filtros devuelve todas las libres) y obligatorio para el Docente; 422 si no es un entero mayor que 0.",
       request: { query: buscarAulasQuerySchema },
       middleware: [solicitantes] as const,
       responses: { 200: jsonResponse(busquedaAulaSchema, "Aulas"), ...commonErrors },
@@ -65,7 +66,8 @@ export const solicitudAulaRoutes = new OpenAPIHono<ApiEnv>()
       path: "/mias",
       tags,
       summary: "Mis solicitudes de aula, las más recientes primero",
-      middleware: [solicitantes] as const,
+      description: "Solo Docente.",
+      middleware: [soloDocente] as const,
       responses: {
         200: jsonResponse(z.array(solicitudAulaSchema), "Solicitudes"),
         ...commonErrors,
@@ -80,9 +82,9 @@ export const solicitudAulaRoutes = new OpenAPIHono<ApiEnv>()
       tags,
       summary: "Solicitar un aula para una clase",
       description:
-        "Queda Pendiente (no reserva el aula). Si la clase no tiene aula y empieza en menos de 30 minutos o ya empezó, nace Asignada y el aula pasa a la clase. 409 si el aula ya está asignada en esa franja o la clase ya tiene una solicitud pendiente.",
+        "Solo Docente. Queda Pendiente (no reserva el aula). Si la clase no tiene aula y empieza en menos de 30 minutos o ya empezó, nace Asignada y el aula pasa a la clase. 409 si el aula ya está asignada en esa franja o la clase ya tiene una solicitud pendiente.",
       request: { body: jsonBody(crearSolicitudAulaSchema) },
-      middleware: [solicitantes] as const,
+      middleware: [soloDocente] as const,
       responses: { 201: jsonResponse(solicitudAulaSchema, "Solicitud creada"), ...commonErrors },
     }),
     async (c) =>
@@ -93,9 +95,9 @@ export const solicitudAulaRoutes = new OpenAPIHono<ApiEnv>()
       method: "get",
       path: "/",
       tags,
-      summary: "Solicitudes de aula de un estado (Bedel)",
+      summary: "Solicitudes de aula por estado (Bedel)",
       description:
-        "Solo Bedel. Pendientes y Asignadas (inmediatas) por franja más próxima; Aprobadas y Rechazadas, las resueltas más recientes primero.",
+        "Solo Bedel. `estado` admite varios valores separados por coma; la respuesta los agrupa en el orden Pendiente, Asignada, Aprobada, Rechazada. Dentro de cada grupo, Pendientes y Asignadas (inmediatas) por franja más próxima; Aprobadas y Rechazadas, las resueltas más recientes primero.",
       request: { query: listarSolicitudesAulaQuerySchema },
       middleware: [soloBedel] as const,
       responses: {

@@ -1,10 +1,13 @@
 import {
   expect,
+  expectBadgeDentroDelEncabezado,
+  expectNoHorizontalPageScroll,
   loginViaUi,
   logoutViaUi,
   newUser,
   registerViaUi,
   seededUsers,
+  sinAvisosVigentes,
   test,
   verifyEmailViaLink,
 } from "./support/fixtures";
@@ -41,15 +44,45 @@ test.describe("Flujo principal de SiGA", () => {
     await expect(page.getByText("Ese ya es el estado actual.")).toBeVisible();
 
     await page.getByLabel("Nuevo estado").selectOption("ABIERTA_CON_NOVEDADES");
-    await page.getByLabel(/Motivo/).fill("Paro de transporte: las clases se dictan con normalidad");
+    const motivo = "Paro de transporte: las clases se dictan con normalidad".padEnd(280, " y");
+    await page.getByLabel(/Motivo/).fill(motivo);
     await page.getByRole("button", { name: "Cambiar estado" }).click();
     await expect(page.getByText("Estado registrado")).toBeVisible();
     await page.getByRole("button", { name: "Ahora no" }).click();
     await expect(page.getByRole("link", { name: /Abierta con novedades/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Abierta con novedades/ })).toContainText(
+      /Desde las \d{2}:\d{2}/,
+    );
     const historial = page.locator("table");
     await expect(historial.getByRole("row").nth(1)).toContainText("Abierta con novedades");
     await expect(historial.getByRole("row").nth(1)).toContainText("Paro de transporte");
     await expect(historial.getByRole("row").nth(1)).toContainText(seededUsers.bedel.name);
+
+    // Un solo aviso: el indicador con el motivo, sin banner, en una pantalla de clases y en otra que no lo es.
+    const indicador = page.getByRole("link", { name: /Abierta con novedades, Paro de transporte/ });
+    for (const ruta of ["/clases", "/novedades"]) {
+      await page.goto(ruta);
+      await expect(indicador).toBeVisible();
+      await expect(indicador).toContainText("Paro de transporte: las clases se dictan");
+      await expect(indicador).toContainText(/Desde las \d{2}:\d{2}/);
+      await expect(indicador).not.toContainText("Actualizado");
+      const desde = indicador.getByText(/^Desde /);
+      expect(await desde.evaluate((span) => span.scrollWidth <= span.clientWidth)).toBe(true);
+      const titulo = page.locator("header h1");
+      expect(await titulo.evaluate((h1) => h1.scrollWidth <= h1.clientWidth)).toBe(true);
+      await expect(page.locator("[data-slot=alert]")).toHaveCount(0);
+    }
+    await sinAvisosVigentes(page);
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto("/estado-institucional");
+    const badge = indicador.locator("[data-estado]");
+    await expect(badge).toBeVisible();
+    await expect(indicador.getByText("Paro de transporte")).toBeHidden();
+    await expect(indicador.getByText(/^Desde /)).toBeHidden();
+    await expectBadgeDentroDelEncabezado(page);
+    await expectNoHorizontalPageScroll(page);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/estado-institucional");
 
     // Se deja la institución como estaba para el resto de la suite.
     await page.getByLabel("Nuevo estado").selectOption("ABIERTA");
@@ -66,6 +99,8 @@ test.describe("Flujo principal de SiGA", () => {
 
     await loginViaUi(page, seededUsers.docente);
     await expect(page.getByRole("heading", { name: "Mis clases de hoy" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Acciones rápidas" })).toHaveCount(0);
+    await page.goto("/novedades");
     await page.getByRole("button", { name: "Publicar novedad" }).click();
     const dialog = page.getByRole("dialog", { name: "Publicar novedad" });
     await dialog.getByLabel("Fecha de las clases").fill(fecha);
@@ -103,6 +138,8 @@ test.describe("Flujo principal de SiGA", () => {
     await page.getByRole("menuitem", { name: "Finalizar novedad" }).click();
     await page.getByRole("button", { name: "Finalizar" }).click();
     await expect(page.getByText("Novedad finalizada")).toBeVisible();
+    await expect(novedad).toHaveCount(0);
+    await page.getByRole("tab", { name: "Historial" }).click();
     await expect(novedad).toContainText("Finalizada");
 
     await page.goto("/clases");
@@ -117,7 +154,7 @@ test.describe("Flujo principal de SiGA", () => {
     await expect(page.getByText("Todavía no seguís ninguna comisión")).toBeVisible();
 
     await page.getByRole("link", { name: "Elegir comisiones" }).click();
-    await expect(page).toHaveURL(/\/preferencias/);
+    await expect(page).toHaveURL(/\/mi-cuenta\/comisiones/);
     await page
       .getByLabel("Carrera")
       .selectOption({ label: "Ingeniería en Sistemas de Información" });
@@ -127,12 +164,22 @@ test.describe("Flujo principal de SiGA", () => {
     await expect(
       page.getByRole("button", { name: "Agregar 5K2 de Proyecto Final" }),
     ).toBeDisabled();
-    await page.getByRole("button", { name: "Guardar" }).click();
-    await expect(page.getByText("Preferencias guardadas")).toBeVisible();
+    await expect(page.getByText("Comisión agregada")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Guardar" })).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Quitar" })).toHaveCount(1);
 
     await page.getByRole("link", { name: "Mis clases" }).click();
     await expect(page.getByRole("heading", { name: "Mis clases de hoy" })).toBeVisible();
     await expect(page.getByText(/\d+ clases? · 5K2/)).toBeVisible();
     await expect(page.getByText("Todavía no seguís ninguna comisión")).toHaveCount(0);
+
+    await page.goto("/mi-cuenta/comisiones");
+    await page.getByRole("button", { name: "Quitar" }).click();
+    await expect(page.getByText("Comisión quitada")).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Quitar" })).toHaveCount(0);
+    await page.getByRole("link", { name: "Mis clases" }).click();
+    await expect(page.getByText("Todavía no seguís ninguna comisión")).toBeVisible();
   });
 });

@@ -106,6 +106,15 @@ SiGA lo usa para las fotos de las incidencias de aulas (RF-15, ADR 006): sin él
 
 Las cuatro son obligatorias a la vez; localmente se dejan vacías (ver `.env.example`). La política CORS de cada bucket (Settings → CORS Policy) lleva en `AllowedOrigins` el origen exacto de su ambiente, `https://staging.<dominio>` o `https://app.<dominio>`: el navegador hace el `PUT` directo al bucket y sin ese origen la subida falla.
 
+### Anthropic (detección de aulas)
+
+SiGA lo usa para detectar las aulas de un plano en "Importar desde plano" (ADR 012). Sin clave, la detección responde 503 nombrando `ANTHROPIC_API_KEY` y el Bedel sigue cargando las aulas a mano; el resto de la app funciona igual. Variables de Vercel, en Production y Preview:
+
+| Variable                 | Valor                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| `ANTHROPIC_API_KEY`      | API key de la consola de Anthropic                                             |
+| `DETECCION_AULAS_MODELO` | Opcional: `haiku` (por defecto), `sonnet` u `opus` (otro valor responde 503); el costo sube en ese orden |
+
 ### Resend
 
 1. Crear la cuenta (plan gratuito: 3.000 emails por mes, 100 por día) y agregar el dominio propio en Domains; cargar en el DNS los registros que indica (SPF, DKIM y el de retorno) y esperar la verificación. No se puede enviar desde `vercel.app`.
@@ -151,7 +160,7 @@ Sin token Turbo corre igual, solo sin caché compartida. Para comprobar que una 
 
 ## Versionado
 
-La versión que se ve al pie de Configuración y sus Novedades salen de un único archivo versionado, `apps/web/lib/releases.json`:
+La versión que se ve al pie de Configuración y "Qué hay de nuevo" salen de un único archivo versionado, `apps/web/lib/releases.json`:
 
 ```json
 {
@@ -164,5 +173,5 @@ La versión que se ve al pie de Configuración y sus Novedades salen de un únic
 
 - La primera entrada es la versión actual. `stage` es la etapa (`Alpha`, `Beta`, o `""` para no mostrar ninguna) y `number` un `X.Y` como string. `apps/web/lib/releases.ts` expone `currentRelease` y `formatVersionLabel` (`Versión Alpha 0.1`). `changes` puede estar vacío (el template arranca así): la UI muestra "Sin cambios registrados.".
 - `changes` son bullets a nivel producto, en es-AR, sin ningún detalle técnico: es lo que lee el usuario.
-- Nadie edita el archivo a mano: lo actualiza `/ticket-flow:prod-deploy` con `release.sh publish` (script del plugin `ticket-flow`), que toma como base el archivo de `origin/main` (la verdad de lo que está en producción), agrega la versión nueva encima y la commitea en la rama que va a producción (`develop` cuando van todos los tickets, `release/...` cuando va uno). La skill propone por defecto la misma etapa y el número +0.1 (`release.sh next`) y pide confirmar versión y Novedades antes de commitear. Detalle en `docs/flujo-de-tickets.md`.
+- Nadie edita el archivo a mano: lo actualiza `/ticket-flow:prod-deploy` con `release.sh publish` (script del plugin `ticket-flow`), que toma como base el archivo de `origin/main` (la verdad de lo que está en producción), agrega la versión nueva encima y la commitea en la rama que va a producción (`develop` cuando van todos los tickets, `release/...` cuando va uno). La skill propone por defecto la misma etapa y el número +0.1 (`release.sh next`) y pide confirmar versión y notas de versión (Qué hay de nuevo) antes de commitear. Detalle en `docs/flujo-de-tickets.md`.
 - Como `main` es la base, el historial de versiones queda completo aunque se hagan releases parciales desde ramas `release/...`.

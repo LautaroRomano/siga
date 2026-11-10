@@ -48,6 +48,29 @@ export const compararPisos = (a: string, b: string) => {
   return rangoA.grupo - rangoB.grupo || rangoA.numero - rangoB.numero || collator.compare(a, b);
 };
 
+export type ConteoPiso = { libres: number; ocupadas: number; noDisponibles: number };
+
+// Pendiente cuenta como ocupada: ambas tienen una clase en curso.
+export const contarEstadosDelPiso = (estados: EstadoPlano[]): ConteoPiso => {
+  const conteo: ConteoPiso = { libres: 0, ocupadas: 0, noDisponibles: 0 };
+  for (const estado of estados) {
+    if (estado === "LIBRE") conteo.libres += 1;
+    else if (estado === "OCUPADA" || estado === "PENDIENTE") conteo.ocupadas += 1;
+    else conteo.noDisponibles += 1;
+  }
+  return conteo;
+};
+
+const pluralizar = (cantidad: number, singular: string, plural: string) =>
+  `${cantidad} ${cantidad === 1 ? singular : plural}`;
+
+export const describirConteoPiso = ({ libres, ocupadas, noDisponibles }: ConteoPiso) =>
+  [
+    pluralizar(libres, "libre", "libres"),
+    pluralizar(ocupadas, "ocupada", "ocupadas"),
+    ...(noDisponibles > 0 ? [pluralizar(noDisponibles, "no disponible", "no disponibles")] : []),
+  ].join(" · ");
+
 export type AccionPlano = "ASIGNAR" | "MOVER" | "REEMPLAZAR";
 
 export const accionPlanoLabels: Record<AccionPlano, string> = {
@@ -96,3 +119,29 @@ export const clasesAsignablesQuerySchema = z.object({
 });
 
 export const destinosAulaQuerySchema = z.object({ claseId: z.string().min(1) });
+
+type AulaDelPiso = { poligono: unknown; plano: unknown };
+
+// Un piso con plano guardado dibuja las aulas ubicadas sobre la imagen; las activas sin
+// polígono van aparte para que no desaparezcan. Sin plano, todas siguen en la grilla.
+export const repartirAulasDelPiso = <T extends AulaDelPiso>(aulas: T[]) => {
+  const plano: NonNullable<T["plano"]> | null =
+    aulas.find((aula) => aula.plano !== null)?.plano ?? null;
+  const ubicadas: (T & { poligono: NonNullable<T["poligono"]> })[] = [];
+  const sinUbicar: T[] = [];
+  for (const aula of aulas) {
+    if (plano !== null && aula.poligono !== null) {
+      ubicadas.push(aula as T & { poligono: NonNullable<T["poligono"]> });
+    } else sinUbicar.push(aula);
+  }
+  return { plano, ubicadas, sinUbicar };
+};
+
+export const zoomMinimo = 1;
+export const zoomMaximo = 4;
+export const pasoDeZoom = 0.5;
+
+export const acercarZoom = (zoom: number) => Math.min(zoom + pasoDeZoom, zoomMaximo);
+export const alejarZoom = (zoom: number) => Math.max(zoom - pasoDeZoom, zoomMinimo);
+
+export const describirZoom = (zoom: number) => `${Math.round(zoom * 100)} %`;

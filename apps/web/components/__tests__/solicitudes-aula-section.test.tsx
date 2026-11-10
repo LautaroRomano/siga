@@ -7,12 +7,21 @@ import { SolicitudesAulaSection } from "@/components/solicitudes/solicitudes-aul
 import { RequestError } from "@/lib/api-client";
 import { renderWithProviders } from "@/test/render";
 
+type Busqueda = { aulas: AulaDto[]; sugerencias: (AulaDto & { faltantes: string[] })[] };
 type Estado = {
   solicitudes: Record<string, SolicitudAulaDto[]>;
   clasesSinAula: ClaseDto[];
   aulas: AulaDto[];
+  busqueda: Busqueda;
+  pedidos: (object | null)[];
 };
-const state = vi.hoisted((): Estado => ({ solicitudes: {}, clasesSinAula: [], aulas: [] }));
+const state = vi.hoisted((): Estado => ({
+  solicitudes: {},
+  clasesSinAula: [],
+  aulas: [],
+  busqueda: { aulas: [], sugerencias: [] },
+  pedidos: [],
+}));
 
 const aprobar = vi.hoisted(() => vi.fn());
 const rechazar = vi.hoisted(() => vi.fn());
@@ -20,12 +29,20 @@ const reasignar = vi.hoisted(() => vi.fn());
 const asignar = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/use-solicitudes-aula", () => ({
-  useSolicitudesAula: (estado: string) => ({ data: state.solicitudes[estado] ?? [] }),
+  useSolicitudesAula: (estados: string[]) => ({
+    data: ["PENDIENTE", "ASIGNADA", "APROBADA", "RECHAZADA"]
+      .filter((estado) => estados.includes(estado))
+      .flatMap((estado) => state.solicitudes[estado] ?? []),
+  }),
   useClasesSinAula: () => ({ data: { clases: state.clasesSinAula } }),
   useAprobarSolicitudAula: () => ({ mutateAsync: aprobar, isPending: false }),
   useRechazarSolicitudAula: () => ({ mutateAsync: rechazar, isPending: false }),
   useReasignarSolicitudAula: () => ({ mutateAsync: reasignar, isPending: false }),
   useAsignarAulaAClase: () => ({ mutateAsync: asignar, isPending: false }),
+  useBuscarAulas: (pedido: object | null) => {
+    state.pedidos.push(pedido);
+    return { data: pedido ? { ...state.busqueda, hayAulasLibres: true } : undefined };
+  },
 }));
 vi.mock("@/hooks/use-novedades", () => ({
   useAulasDisponibles: () => ({ data: state.aulas }),
@@ -84,23 +101,52 @@ beforeEach(() => {
   state.solicitudes = {};
   state.clasesSinAula = [];
   state.aulas = [aula("a14", "Aula 14", 50), aula("a7", "Aula 7", 45), aula("a3", "Aula 3")];
+  state.busqueda = { aulas: state.aulas, sugerencias: [] };
+  state.pedidos = [];
 });
 
 describe("SolicitudesAulaSection", () => {
-  it("las cinco pestañas muestran los datos de la solicitud", () => {
-    state.solicitudes.PENDIENTE = [solicitud({ comentario: "Con parlantes" })];
+  const marcar = (nombre: string) => userEvent.click(screen.getByRole("button", { name: nombre }));
+
+  it("no tiene pestañas y muestra las tarjetas Clases sin aula y Solicitudes", () => {
     renderWithProviders(<SolicitudesAulaSection />);
 
-    for (const nombre of [
-      "Pendientes",
-      "Asignadas",
-      "Aprobadas",
-      "Rechazadas",
-      "Clases sin aula",
-    ]) {
-      expect(screen.getByRole("tab", { name: nombre })).toBeVisible();
-    }
-    expect(screen.getByText(/Proyecto Final · 5K2/)).toBeVisible();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.getByText("Clases sin aula (0)")).toBeVisible();
+    expect(screen.getByText("No hay clases sin aula")).toBeVisible();
+    expect(screen.getByText("Solicitudes")).toBeVisible();
+  });
+
+  it("el contador de Clases sin aula coincide con las clases listadas", () => {
+    state.clasesSinAula = [claseSinAula, { ...claseSinAula, id: "c10" }];
+    renderWithProviders(<SolicitudesAulaSection />);
+
+    expect(screen.getByText("Clases sin aula (2)")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Asignar aula" })).toHaveLength(2);
+  });
+
+  it("el filtro arranca con Pendientes y Asignación inmediata y muestra los datos", () => {
+    state.solicitudes.PENDIENTE = [solicitud({ comentario: "Con parlantes" })];
+    state.solicitudes.APROBADA = [solicitud({ id: "s3", estado: "APROBADA" })];
+    renderWithProviders(<SolicitudesAulaSection />);
+
+    expect(screen.getByRole("button", { name: "Pendientes" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Asignación inmediata" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Aprobadas" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Rechazadas" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getAllByText(/Proyecto Final · 5K2/)).toHaveLength(1);
     expect(screen.getByText(/Marcos Álvarez · 15\/10\/2026 · 19:00 – 23:00/)).toBeVisible();
     expect(screen.getByText(/Aula pedida: Aula 7 \(Edificio B, PB\)/)).toBeVisible();
     expect(screen.getByText("40 alumnos · Proyector")).toBeVisible();
@@ -108,12 +154,54 @@ describe("SolicitudesAulaSection", () => {
     expect(screen.getByRole("button", { name: "Aprobar" })).toBeVisible();
   });
 
-  it("Asignadas ofrece solo Reasignar y marca la asignación inmediata", async () => {
+  it("agrupa la lista en el orden del filtro", async () => {
+    state.solicitudes.PENDIENTE = [solicitud({ id: "p", comentario: "uno" })];
+    state.solicitudes.APROBADA = [solicitud({ id: "a", estado: "APROBADA", comentario: "dos" })];
+    state.solicitudes.RECHAZADA = [
+      solicitud({ id: "r", estado: "RECHAZADA", motivoRechazo: "Hay obras" }),
+    ];
+    renderWithProviders(<SolicitudesAulaSection />);
+    await marcar("Rechazadas");
+    await marcar("Aprobadas");
+
+    const textos = screen.getAllByText(/Comentario:|Motivo del rechazo:/).map((n) => n.textContent);
+    expect(textos).toEqual(["Comentario: uno", "Comentario: dos", "Motivo del rechazo: Hay obras"]);
+    expect(
+      screen
+        .getAllByRole("button", { name: /Aprobar|Rechazar|Reasignar/ })
+        .map((b) => b.textContent),
+    ).toEqual(["Aprobar", "Rechazar"]);
+  });
+
+  it("sin estados marcados y sin resultados muestra los textos vacíos", async () => {
+    renderWithProviders(<SolicitudesAulaSection />);
+    expect(screen.getByText("No hay solicitudes en los estados elegidos")).toBeVisible();
+
+    await marcar("Pendientes");
+    await marcar("Asignación inmediata");
+    expect(screen.getByText("Elegí al menos un estado para ver solicitudes")).toBeVisible();
+  });
+
+  it("el desplegable explica los cuatro estados y arranca cerrado", async () => {
+    renderWithProviders(<SolicitudesAulaSection />);
+    expect(screen.queryByText(/espera tu aprobación/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Qué significa cada estado"));
+    for (const texto of [
+      /espera tu aprobación/,
+      /empezaba en menos de 30 minutos/,
+      /la clase tomó el aula elegida/,
+      /la clase conservó su aula/,
+    ]) {
+      expect(screen.getByText(texto)).toBeVisible();
+    }
+  });
+
+  it("Asignación inmediata ofrece solo Reasignar y marca la asignación inmediata", () => {
     state.solicitudes.ASIGNADA = [solicitud({ estado: "ASIGNADA" })];
     renderWithProviders(<SolicitudesAulaSection />);
-    await userEvent.click(screen.getByRole("tab", { name: "Asignadas" }));
 
-    expect(await screen.findByText("Asignada (inmediata)")).toBeVisible();
+    expect(screen.getByText("Asignada (inmediata)")).toBeVisible();
     expect(screen.getByRole("button", { name: "Reasignar" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Rechazar" })).not.toBeInTheDocument();
   });
@@ -124,11 +212,12 @@ describe("SolicitudesAulaSection", () => {
       solicitud({ id: "s2", estado: "RECHAZADA", motivoRechazo: "Hay obras" }),
     ];
     renderWithProviders(<SolicitudesAulaSection />);
+    await marcar("Pendientes");
+    await marcar("Asignación inmediata");
+    await marcar("Aprobadas");
+    await marcar("Rechazadas");
 
-    await userEvent.click(screen.getByRole("tab", { name: "Aprobadas" }));
-    expect(await screen.findByText("Aprobada")).toBeVisible();
-    await userEvent.click(screen.getByRole("tab", { name: "Rechazadas" }));
-    expect(await screen.findByText("Motivo del rechazo: Hay obras")).toBeVisible();
+    expect(screen.getByText("Motivo del rechazo: Hay obras")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /Aprobar|Rechazar|Reasignar/ }),
     ).not.toBeInTheDocument();
@@ -185,8 +274,7 @@ describe("SolicitudesAulaSection", () => {
     state.solicitudes.ASIGNADA = [solicitud({ estado: "ASIGNADA" })];
     reasignar.mockResolvedValue(undefined);
     renderWithProviders(<SolicitudesAulaSection />);
-    await userEvent.click(screen.getByRole("tab", { name: "Asignadas" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Reasignar" }));
+    await userEvent.click(screen.getByRole("button", { name: "Reasignar" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Reasignar aula" });
     expect(within(dialog).queryByRole("option", { name: /Aula 14/ })).not.toBeInTheDocument();
@@ -195,19 +283,92 @@ describe("SolicitudesAulaSection", () => {
     await waitFor(() => expect(reasignar).toHaveBeenCalledWith({ id: "s1", aulaId: "a3" }));
   });
 
-  it("Clases sin aula asigna el aula elegida", async () => {
-    state.clasesSinAula = [claseSinAula];
-    asignar.mockResolvedValue(undefined);
-    renderWithProviders(<SolicitudesAulaSection />);
-    await userEvent.click(screen.getByRole("tab", { name: "Clases sin aula" }));
-    expect(await screen.findByText(/Simulación · 5K2/)).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Asignar aula" }));
+  describe("Clases sin aula", () => {
+    const abrirAsignar = async () => {
+      state.clasesSinAula = [claseSinAula];
+      asignar.mockResolvedValue(undefined);
+      renderWithProviders(<SolicitudesAulaSection />);
+      expect(await screen.findByText(/Simulación · 5K2/)).toBeVisible();
+      await userEvent.click(screen.getByRole("button", { name: "Asignar aula" }));
+      return screen.findByRole("dialog", { name: "Asignar aula" });
+    };
 
-    const dialog = await screen.findByRole("dialog", { name: "Asignar aula" });
-    const confirmar = within(dialog).getByRole("button", { name: "Asignar" });
-    expect(confirmar).toBeDisabled();
-    await userEvent.selectOptions(within(dialog).getByLabelText("Aula"), "a14");
-    await userEvent.click(confirmar);
-    await waitFor(() => expect(asignar).toHaveBeenCalledWith({ id: "c9", aulaId: "a14" }));
+    it("sin filtros ofrece todas las aulas libres y asigna la elegida", async () => {
+      const dialog = await abrirAsignar();
+      expect(within(dialog).getByLabelText("Cantidad de alumnos")).toHaveValue(null);
+      for (const recurso of ["Proyector", "Pizarra", "Climatización"]) {
+        expect(within(dialog).getByRole("checkbox", { name: recurso })).toBeVisible();
+      }
+      expect(within(dialog).getAllByRole("checkbox")).toHaveLength(7);
+      expect(state.pedidos.at(-1)).toEqual({ claseId: "c9", alumnos: undefined, recursos: [] });
+
+      const confirmar = within(dialog).getByRole("button", { name: "Asignar" });
+      expect(confirmar).toBeDisabled();
+      await userEvent.selectOptions(within(dialog).getByLabelText("Aula"), "a14");
+      await userEvent.click(confirmar);
+      await waitFor(() => expect(asignar).toHaveBeenCalledWith({ id: "c9", aulaId: "a14" }));
+    });
+
+    it("la cantidad y los recursos actualizan la búsqueda", async () => {
+      const dialog = await abrirAsignar();
+      await userEvent.type(within(dialog).getByLabelText("Cantidad de alumnos"), "30");
+      await userEvent.click(within(dialog).getByRole("checkbox", { name: "Proyector" }));
+      expect(state.pedidos.at(-1)).toEqual({
+        claseId: "c9",
+        alumnos: 30,
+        recursos: ["Proyector"],
+      });
+    });
+
+    it.each(["0", "2.5"])("la cantidad %s muestra el error y no deja asignar", async (valor) => {
+      const dialog = await abrirAsignar();
+      await userEvent.selectOptions(within(dialog).getByLabelText("Aula"), "a14");
+      await userEvent.type(within(dialog).getByLabelText("Cantidad de alumnos"), valor);
+
+      expect(
+        await within(dialog).findByText("Ingresá una cantidad de alumnos mayor que 0."),
+      ).toBeVisible();
+      expect(within(dialog).getByRole("button", { name: "Asignar" })).toBeDisabled();
+      expect(state.pedidos.at(-1)).toBeNull();
+    });
+
+    it("sin coincidencias avisa y lista las aulas con todo lo que incumplen", async () => {
+      state.busqueda = {
+        aulas: [],
+        sugerencias: [
+          {
+            ...aula("a14", "Aula 14", 50),
+            faltantes: ["Capacidad para 500 alumnos", "Sin proyector"],
+          },
+        ],
+      };
+      const dialog = await abrirAsignar();
+      await userEvent.type(within(dialog).getByLabelText("Cantidad de alumnos"), "500");
+
+      expect(
+        await within(dialog).findByText("Ninguna aula cumple todos los criterios."),
+      ).toBeVisible();
+      expect(
+        within(dialog).getByRole("option", {
+          name: /Aula 14.*Capacidad para 500 alumnos, Sin proyector/,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it("si el aula se ocupó muestra el aviso y deja elegir otra sin cerrar", async () => {
+      const dialog = await abrirAsignar();
+      asignar.mockRejectedValueOnce(
+        new RequestError(409, "CONFLICT", "El aula ya está asignada en esa franja"),
+      );
+      await userEvent.selectOptions(within(dialog).getByLabelText("Aula"), "a14");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Asignar" }));
+
+      expect(
+        await within(dialog).findByText("El aula ya está asignada en esa franja"),
+      ).toBeVisible();
+      await userEvent.selectOptions(within(dialog).getByLabelText("Aula"), "a7");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Asignar" }));
+      await waitFor(() => expect(asignar).toHaveBeenLastCalledWith({ id: "c9", aulaId: "a7" }));
+    });
   });
 });

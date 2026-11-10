@@ -45,7 +45,7 @@ Requisitos cubiertos: RF-02, RF-06, RF-15, RF-16. Criterios de aceptación: CA-0
 
 ## RF-16 Asignación de aulas y aprobación de solicitudes
 
-**Quién**: Bedel. La Autoridad académica asigna, mueve y reemplaza clases desde el Plano de aulas; las solicitudes siguen siendo del Bedel.
+**Quién**: Bedel. La Autoridad académica asigna, mueve y reemplaza clases desde la vista Plano de Aulas; las solicitudes siguen siendo del Bedel.
 
 **Entrada**: solicitud pendiente (RF-06) o clase sin aula, aula, decisión (Aprobar / Rechazar) y motivo (obligatorio si se rechaza).
 
@@ -60,7 +60,9 @@ Requisitos cubiertos: RF-02, RF-06, RF-15, RF-16. Criterios de aceptación: CA-0
 **Reglas**
 
 - Toda asignación que superponga un aula en la misma franja se rechaza con el mensaje "El aula ya está asignada en esa franja: la ocupa la comisión <código>" y no cambia nada.
-- Desde el panel de un aula del Plano de aulas (solo clases de hoy), Bedel y Autoridad pueden:
+- Aulas es una sola sección: el Bedel alterna entre la vista Lista (gestión) y la vista Plano (por edificio y piso) y ve el mismo detalle del aula en ambas; la Autoridad abre directamente el Plano, y Docente y Estudiante lo consultan sin acciones.
+- En la vista Plano, un piso con plano guardado muestra su imagen con cada aula activa ubicada dibujada sobre su recinto, con su código y el icono y color de su estado, y debajo la leyenda de los cinco estados; tocar un aula abre el mismo detalle que la grilla. Las aulas activas del piso sin ubicación van debajo en **Sin ubicar** (solo si hay alguna). Un piso sin plano conserva la grilla. El plano abre ajustado al ancho; Acercar suma 50 % hasta 400 %, Alejar resta 50 % sin bajar del ajuste al ancho, Restablecer vuelve a él y, acercado, se arrastra dentro de su recuadro. El refresco de 30 s conserva el zoom. Si la imagen no carga se avisa "No se pudo cargar el plano de este piso" y se muestra la grilla.
+- Desde el panel de un aula (solo clases de hoy), Bedel y Autoridad pueden:
   - **Asignar clase** (aula Disponible sin clase en la franja actual): se ofrecen las clases de hoy sin aula que admiten asignación, sin solicitud pendiente, con los estudiantes que siguen la comisión dentro de la capacidad y la franja libre en el aula. No genera novedad y los docentes reciben el correo de asignación. Con la franja en curso el aula pasa a "Pendiente"; con una franja futura sigue "Libre" y el panel muestra la clase como próxima.
   - **Mover a otra aula** (aula con clase en curso, también si está Fuera de servicio o En mantenimiento): se ofrecen las aulas Disponibles, libres en esa franja y con capacidad, agrupadas por piso. Publica un "Cambio de aula" y los docentes reciben el correo de reasignación; la original queda "Libre".
   - **Reemplazar clase** (aula Disponible con clase en curso): se elige la clase que entra y el aula adonde va la actual. Es todo o nada; solo la desplazada genera "Cambio de aula" y correo de reasignación, y la que entra recibe el correo de asignación.
@@ -72,7 +74,7 @@ Requisitos cubiertos: RF-02, RF-06, RF-15, RF-16. Criterios de aceptación: CA-0
 
 ## RF-15 Incidencias de infraestructura
 
-**Quién reporta**: Docente o Bedel. **Quién gestiona**: Bedel.
+**Quién reporta**: Docente o Bedel. **Quién gestiona**: Bedel. **Quién consulta**: Autoridad (solo lectura).
 
 **Entrada**: aula, elemento afectado (proyector, climatización, iluminación, mobiliario, conectividad, otro), descripción (máximo 500 caracteres), gravedad (Leve / Impide el uso del aula) y foto opcional (JPG o PNG, máximo 5 MB; se comprime a 1 MB).
 
@@ -86,11 +88,13 @@ Requisitos cubiertos: RF-02, RF-06, RF-15, RF-16. Criterios de aceptación: CA-0
 
 **Reglas**: cada incidencia conserva el historial completo de estados con fecha, hora y usuario responsable (CA-06).
 
+**Pestañas**: `/incidencias` abre en **Abiertas** (Abierta y En curso, sin filtro de estado ni paginación; "Nueva incidencia" y, en "Detalle", "Pasar a En curso" y "Resolver"). Al resolverla pasa al **Historial** sin recargar: incidencias Resueltas, con rango por fecha del reporte (30 días precargados, hasta 12 meses) y aula, total del período, de a 20 con "Página X de Y" y "Detalle" de solo lectura con el historial de estados. La Autoridad ve ambas pestañas sin crear ni cambiar estados.
+
 **Salidas**: incidencia visible en el listado de bedelía y en el detalle del aula; historial de estados; error ante datos incompletos o archivo inválido.
 
 ## Pantallas
 
-- **Bedel**: Aulas (listado con estado y ocupación en tiempo real; alta, edición, baja; detalle con clases asignadas e incidencias); Solicitudes (pendientes, aprobar o rechazar con motivo); Asignar aula a clases sin aula; Incidencias (listado, cambio de estado, observaciones).
+- **Bedel**: Aulas (listado con estado y ocupación en tiempo real; alta, edición, baja; detalle con clases asignadas e incidencias); Solicitudes (pendientes, aprobar o rechazar con motivo); Asignar aula a clases sin aula (cantidad de alumnos y recursos opcionales; sin filtros ve todas las aulas libres, y sin coincidencias, hasta 5 con lo que incumplen); no solicita aula ni tiene Mis solicitudes: Solicitar aula y Mis solicitudes llevan a Solicitudes; Incidencias (listado, cambio de estado, observaciones).
 - **Docente**: Solicitar aula (filtros, resultados ordenados, confirmación); Mis solicitudes con su estado; Reportar incidencia desde la clase o el aula.
 - **Estudiante**: ve el aula asignada en Mis clases (RF-07); no accede a este módulo.
 
