@@ -359,6 +359,44 @@ describe("SiGA: perfiles y flujo principal por HTTP", () => {
       como(perfil);
       expect((await call("/aulas/plano")).status).toBe(200);
     }
+    for (const perfil of [docente, estudiante, autoridad]) {
+      como(perfil);
+      expect((await call("/planos")).status).toBe(403);
+      como(perfil);
+      expect((await call("/planos/x")).status).toBe(403);
+      como(perfil);
+      expect(
+        (await call("/planos/imagen", json({ contentType: "image/png", size: 1000 }))).status,
+      ).toBe(403);
+      como(perfil);
+      expect(
+        (await call("/planos", json({ edificio: "A", piso: "1", key: "k", ancho: 10, alto: 10 })))
+          .status,
+      ).toBe(403);
+      como(perfil);
+      expect(
+        (
+          await call(
+            "/planos/x/aulas",
+            json({
+              capacidadPorDefecto: 30,
+              aulas: [
+                {
+                  codigo: "A",
+                  poligono: [
+                    { x: 0.1, y: 0.1 },
+                    { x: 0.3, y: 0.1 },
+                    { x: 0.3, y: 0.3 },
+                  ],
+                },
+              ],
+            }),
+          )
+        ).status,
+      ).toBe(403);
+      como(perfil);
+      expect((await call("/planos/x/deteccion", json({}))).status).toBe(403);
+    }
 
     como(institution);
     const aula = { codigo: "Aula 99", edificio: "Edificio A", piso: "PB", capacidad: 35 };
@@ -972,5 +1010,40 @@ describe("política de privacidad por HTTP", () => {
     expect(aceptada.status).toBe(200);
     expect(await aceptada.json()).toMatchObject({ version: 2, aceptadaEn: expect.any(String) });
     expect(await pendiente()).toBe(false);
+  });
+});
+
+describe("Planos por HTTP", () => {
+  it("la importación responde 422 con un polígono inválido o códigos repetidos", async () => {
+    const institution = await createInstitution();
+    getAuthContext.mockResolvedValue(authOf(institution, institution));
+    const plano = await prisma.planoPiso.create({
+      data: {
+        organizationId: institution.organizationId,
+        edificio: "Edificio A",
+        piso: "PB",
+        imagenKey: "k",
+        ancho: 10,
+        alto: 10,
+      },
+    });
+    const poligono = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+    ];
+    const importar = (aulas: object[]) =>
+      call(`/planos/${plano.id}/aulas`, json({ capacidadPorDefecto: 30, aulas }));
+
+    expect((await importar([{ codigo: "A1", poligono: poligono.slice(0, 2) }])).status).toBe(422);
+    expect(
+      (await importar([{ codigo: "A1", poligono: [...poligono, { x: 2, y: 0 }] }])).status,
+    ).toBe(422);
+    const repetidas = [
+      { codigo: "A1", poligono },
+      { codigo: "A1", poligono },
+    ];
+    expect((await importar(repetidas)).status).toBe(422);
+    expect((await importar([{ codigo: "A1", poligono }])).status).toBe(201);
   });
 });
