@@ -5,7 +5,13 @@ import {
   claseDeAsistenciaId,
   crearClaseDeAsistenciaHoy,
 } from "./support/db";
-import { expect, loginViaUi, seededUsers, test } from "./support/fixtures";
+import {
+  expect,
+  expectNoHorizontalPageScroll,
+  loginViaUi,
+  seededUsers,
+  test,
+} from "./support/fixtures";
 
 const minutosArgentinos = () => {
   const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
@@ -99,8 +105,12 @@ test.describe("Paro levantado el mismo día", () => {
 
     const { contexto, pagina: estudiante } = await comoEstudiante(browser, baseURL);
     const avisoDelEstudiante = estudiante.locator("[data-slot=item]", { hasText: titulo });
+    const indicadorUrgente = estudiante.getByRole("link", {
+      name: new RegExp(`Aviso urgente: ${titulo}|\\d+ avisos urgentes`),
+    });
     await estudiante.goto("/avisos");
     await expect(avisoDelEstudiante).toBeVisible();
+    await expect(indicadorUrgente).toBeVisible();
 
     await page.goto("/avisos");
     await page.getByRole("tab", { name: "Publicados" }).click();
@@ -115,9 +125,7 @@ test.describe("Paro levantado el mismo día", () => {
     await estudiante.reload();
     await expect(estudiante.getByRole("tab", { name: "Vigentes" })).toBeVisible();
     await expect(avisoDelEstudiante).toHaveCount(0);
-    await expect(
-      estudiante.getByRole("link", { name: new RegExp(`Aviso urgente: ${titulo}`) }),
-    ).toHaveCount(0);
+    await expect(indicadorUrgente).toHaveCount(0);
     await estudiante.getByRole("tab", { name: "Historial" }).click();
     await expect(avisoDelEstudiante.getByText(/Finalizado por Rosa Benítez/)).toBeVisible();
     await contexto.close();
@@ -130,5 +138,56 @@ test.describe("Paro levantado el mismo día", () => {
     );
     expect(intento.status()).toBe(403);
     await docente.close();
+  });
+
+  test("en 375 px la confirmación de finalizar y el formulario de reapertura no scrollean a lo ancho", async ({
+    page,
+  }) => {
+    const titulo = `Móvil ${Date.now().toString(36)}`;
+    await page.setViewportSize({ width: 375, height: 800 });
+    await loginViaUi(page, seededUsers.bedel);
+    const publicado = await page.request.post("/api/v1/avisos", {
+      data: {
+        titulo,
+        cuerpo: "No hay clases",
+        prioridad: "URGENTE",
+        destinatarios: { todos: true, perfiles: [], carreraIds: [], anios: [], comisionIds: [] },
+        hasta: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+        enviarPorCorreo: false,
+      },
+    });
+    expect(publicado.ok()).toBeTruthy();
+
+    await page.goto("/avisos");
+    await page.getByRole("tab", { name: "Publicados" }).click();
+    await page
+      .locator("[data-slot=item]", { hasText: titulo })
+      .getByRole("button", { name: "Finalizar" })
+      .click();
+    const confirmacion = page.getByRole("alertdialog", { name: "¿Finalizar el aviso?" });
+    await expect(confirmacion).toBeVisible();
+    await expectNoHorizontalPageScroll(page);
+    await confirmacion.getByRole("button", { name: "Finalizar aviso" }).click();
+    await expect(page.getByText("Aviso finalizado")).toBeVisible();
+
+    await page.goto("/estado-institucional");
+    await cambiarEstado(page, "CERRADA", "Paro docente");
+    await page.getByRole("button", { name: "Cerrar la institución" }).click();
+    await page
+      .getByRole("alertdialog", { name: "¿Generar un aviso institucional?" })
+      .getByRole("button", { name: "Ahora no" })
+      .click();
+    await page.getByLabel("Nuevo estado").selectOption("ABIERTA");
+    await expect(
+      page.getByRole("checkbox", { name: "Reanudar las clases suspendidas por el cierre" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "Las que todavía no terminaron vuelven al estado que tenían antes del cierre.",
+      ),
+    ).toBeVisible();
+    await expectNoHorizontalPageScroll(page);
+    await page.getByRole("button", { name: "Cambiar estado" }).click();
+    await expect(page.getByText(/Estado registrado/)).toBeVisible();
   });
 });

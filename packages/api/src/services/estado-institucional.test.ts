@@ -16,6 +16,7 @@ import {
 } from "../test/db";
 
 import { cambiarEstado, listarHistorial, obtenerEstadoActual } from "./estado-institucional";
+import { publicarNovedad } from "./novedades";
 
 let institution: TestOrganization;
 let fixture: AcademicFixture;
@@ -186,6 +187,23 @@ describe("estado institucional", () => {
       expect(cambio.clasesReanudadas).toBe(0);
       expect(await estadoDe(porDocente.id)).toBe("SUSPENDIDA");
       expect(await estadoDe(terminada.id)).toBe("SUSPENDIDA");
+    });
+
+    it("el docente puede publicar una novedad sobre una clase reanudada", async () => {
+      const clase = await createClase(institution, fixture, hoy(), "00:00", "23:59");
+      await cerrar();
+      await cambiarEstado(bedel(), { estado: "ABIERTA", reanudarClases: true });
+
+      const novedad = await asOrganization(institution, () =>
+        publicarNovedad(authOf(institution, fixture.docente), {
+          claseIds: [clase.id],
+          tipo: "DEMORA",
+          minutosDemora: 10,
+        }),
+      );
+
+      expect(novedad).toMatchObject({ tipo: "DEMORA", estado: "ACTIVA" });
+      expect(await estadoDe(clase.id)).toBe("DEMORADA");
     });
 
     it("solo reanuda las del último cierre", async () => {
